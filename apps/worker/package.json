@@ -1,0 +1,25 @@
+{
+  "name": "@pricelens/worker",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.9.0",
+    "@pricelens/adapters": "workspace:*",
+    "@pricelens/pipeline": "workspace:*",
+    "@pricelens/shared": "workspace:*",
+    "pg-boss": "^10.3.2",
+    "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

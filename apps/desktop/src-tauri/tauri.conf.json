@@ -1,0 +1,22 @@
+{
+  "productName": "PriceLens",
+  "version": "1.0.0",
+  "identifier": "ua.pricelens.desktop",
+  "build": {
+    "frontendDist": "../../web/dist",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      { "title": "PriceLens", "width": 1280, "height": 800, "resizable": true }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": ["icons/icon.png"]
+  }
+}

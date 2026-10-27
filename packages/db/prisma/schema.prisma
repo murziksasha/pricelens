@@ -1,0 +1,475 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  user
+}
+
+enum MarkStatus {
+  interesting
+  rejected
+  bought
+  contacted
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  login        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role
+  isActive     Boolean  @default(true) @map("is_active")
+  language     String   @default("en")
+  theme        String   @default("system")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sessions      Session[]
+  searches      Search[]
+  visits        Visit[]
+  notes         ListingNote[]
+  purchases     Purchase[]
+  templates     SearchTemplate[]
+  notifications Notification[]
+  audit         AuditLog[]           @relation("audit_actor")
+  selections    UserSiteSelection[]
+  telegram      TelegramLink?
+  telegramCode  TelegramCode?
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Site {
+  id                   String    @id @default(uuid()) @db.Uuid
+  key                  String    @unique
+  name                 String
+  domain               String
+  mode                 String
+  urlTemplate          String    @map("url_template")
+  parseRules           Json      @default("{}") @map("parse_rules")
+  enabled              Boolean   @default(true)
+  priority             Int       @default(100)
+  regionTags           String[]  @default([]) @map("region_tags")
+  pollIntervalMinutes  Int       @default(30) @map("poll_interval_minutes")
+  maxConcurrency       Int       @default(1) @map("max_concurrency")
+  minDelayMs           Int       @default(800) @map("min_delay_ms")
+  pausedUntil          DateTime? @map("paused_until")
+  useBrowser           Boolean   @default(false) @map("use_browser")
+  supportedFilters     String[]  @default([]) @map("supported_filters")
+  unsupportedFilters   String[]  @default([]) @map("unsupported_filters")
+  defaultCondition     String    @default("unknown") @map("default_condition")
+  currentVersion       Int       @default(1) @map("current_version")
+  icon                 String?
+
+  listings     Listing[]
+  versions     SiteConfigVersion[]
+  health       SiteHealth[]
+  members      SiteGroupMember[]
+  selections   UserSiteSelection[]
+  runs         SearchSiteRun[]
+  caches       SearchCache[]
+  proposals    HealProposal[]
+  shots        BrowserShot[]
+
+  @@map("sites")
+}
+
+model SiteGroup {
+  id      String            @id @default(uuid()) @db.Uuid
+  name    String
+  preset  Boolean           @default(false)
+  members SiteGroupMember[]
+
+  @@map("site_groups")
+}
+
+model SiteGroupMember {
+  groupId String    @map("group_id") @db.Uuid
+  siteId  String    @map("site_id") @db.Uuid
+  group   SiteGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  site    Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, siteId])
+  @@map("site_group_members")
+}
+
+model SiteConfigVersion {
+  id        String   @id @default(uuid()) @db.Uuid
+  siteId    String   @map("site_id") @db.Uuid
+  version   Int
+  config    Json
+  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, version])
+  @@map("site_config_versions")
+}
+
+model SiteHealth {
+  id             String   @id @default(uuid()) @db.Uuid
+  siteId         String   @map("site_id") @db.Uuid
+  checkedAt      DateTime @default(now()) @map("checked_at")
+  status         String
+  error          String?
+  latencyMs      Int?     @map("latency_ms")
+  screenshotPath String?  @map("screenshot_path")
+  site           Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, checkedAt])
+  @@map("site_health")
+}
+
+model UserSiteSelection {
+  userId   String  @map("user_id") @db.Uuid
+  siteId   String  @map("site_id") @db.Uuid
+  selected Boolean
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site     Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, siteId])
+  @@map("user_site_selection")
+}
+
+model Search {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  query     String
+  filters   Json
+  siteIds   String[] @map("site_ids")
+  refresh   Boolean  @default(false)
+  status    String   @default("running")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  results   SearchResult[]
+  runs      SearchSiteRun[]
+
+  @@index([userId, createdAt])
+  @@map("searches")
+}
+
+model SearchSiteRun {
+  id          String    @id @default(uuid()) @db.Uuid
+  searchId    String    @map("search_id") @db.Uuid
+  siteId      String    @map("site_id") @db.Uuid
+  status      String
+  error       String?
+  resultCount Int       @default(0) @map("result_count")
+  fromCache   Boolean   @default(false) @map("from_cache")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  search      Search    @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  site        Site      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([searchId])
+  @@map("search_site_runs")
+}
+
+model SearchCache {
+  id         String   @id @default(uuid()) @db.Uuid
+  siteId     String   @map("site_id") @db.Uuid
+  cacheKey   String   @map("cache_key")
+  fetchedAt  DateTime @map("fetched_at")
+  listingIds String[] @map("listing_ids")
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, cacheKey])
+  @@map("search_cache")
+}
+
+model SearchTemplate {
+  id        String            @id @default(uuid()) @db.Uuid
+  ownerId   String            @map("owner_id") @db.Uuid
+  name      String
+  query     String
+  siteIds   String[]          @map("site_ids")
+  filters   Json
+  sort      String?
+  shared    Boolean           @default(false)
+  createdAt DateTime          @default(now()) @map("created_at")
+  owner     User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  schedule  TemplateSchedule?
+
+  @@index([ownerId])
+  @@map("search_templates")
+}
+
+model TemplateSchedule {
+  id              String         @id @default(uuid()) @db.Uuid
+  templateId      String         @unique @map("template_id") @db.Uuid
+  cron            String         @default("")
+  intervalMinutes Int?           @map("interval_minutes")
+  dailyTime       String?        @map("daily_time")
+  enabled         Boolean        @default(true)
+  notifyRules     Json           @map("notify_rules")
+  lastRunAt       DateTime?      @map("last_run_at")
+  template        SearchTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("template_schedules")
+}
+
+model ScheduleRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  templateId   String    @map("template_id") @db.Uuid
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  newCount     Int       @default(0) @map("new_count")
+  changedCount Int       @default(0) @map("changed_count")
+  errors       Json?
+
+  @@index([templateId, startedAt])
+  @@map("schedule_runs")
+}
+
+model Listing {
+  id          String    @id @default(uuid()) @db.Uuid
+  siteId      String    @map("site_id") @db.Uuid
+  url         String    @unique
+  externalId  String?   @map("external_id")
+  title       String
+  price       Decimal   @db.Decimal(14, 2)
+  currency    String
+  location    String?
+  postedAt    DateTime? @map("posted_at")
+  specs       Json?
+  imageUrl    String?   @map("image_url")
+  imageHash   String?   @map("image_hash")
+  condition   String    @default("unknown")
+  description String?
+  seller      String?
+  firstSeenAt DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+
+  site      Site             @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  prices    ListingPrice[]
+  results   SearchResult[]
+  visits    Visit[]
+  mark      ListingMark?
+  notes     ListingNote[]
+  dupOf     Duplicate?       @relation("dup_listing")
+  dupOrigin Duplicate[]      @relation("dup_original")
+  grouped   ProductListing?
+  purchases Purchase[]
+
+  @@index([siteId, externalId])
+  @@index([title])
+  @@map("listings")
+}
+
+model ListingPrice {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  price     Decimal  @db.Decimal(14, 2)
+  seenAt    DateTime @default(now()) @map("seen_at")
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, seenAt])
+  @@map("listing_prices")
+}
+
+model Product {
+  id                 String   @id @default(uuid()) @db.Uuid
+  normalizedName     String   @map("normalized_name")
+  category           String   @default("laptop")
+  specs              Json
+  groupKey           String   @unique @map("group_key")
+  confidence         Float    @default(0)
+  expectedSalePrice  Decimal? @map("expected_sale_price") @db.Decimal(14, 2)
+  minMargin          Decimal? @map("min_margin") @db.Decimal(14, 2)
+  manual             Boolean  @default(false)
+  listings           ProductListing[]
+  purchases          Purchase[]
+
+  @@map("products")
+}
+
+model ProductListing {
+  productId  String  @map("product_id") @db.Uuid
+  listingId  String  @id @map("listing_id") @db.Uuid
+  matchScore Float   @map("match_score")
+  manual     Boolean @default(false)
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  listing    Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_listings")
+}
+
+model SearchResult {
+  searchId  String  @map("search_id") @db.Uuid
+  listingId String  @map("listing_id") @db.Uuid
+  rank      Int
+  search    Search  @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([searchId, listingId])
+  @@map("search_results")
+}
+
+model Visit {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  visitedAt DateTime @default(now()) @map("visited_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, visitedAt])
+  @@index([userId])
+  @@map("visits")
+}
+
+model ListingMark {
+  listingId String     @id @map("listing_id") @db.Uuid
+  status    MarkStatus
+  tags      String[]   @default([])
+  updatedBy String?    @map("updated_by") @db.Uuid
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  listing   Listing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@map("listing_marks")
+}
+
+model ListingNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  body      String
+  shared    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_notes")
+}
+
+model Duplicate {
+  listingId         String   @id @map("listing_id") @db.Uuid
+  originalListingId String   @map("original_listing_id") @db.Uuid
+  reason            String
+  createdAt         DateTime @default(now()) @map("created_at")
+  listing           Listing  @relation("dup_listing", fields: [listingId], references: [id], onDelete: Cascade)
+  original          Listing  @relation("dup_original", fields: [originalListingId], references: [id], onDelete: Cascade)
+
+  @@map("duplicates")
+}
+
+model Purchase {
+  id             String    @id @default(uuid()) @db.Uuid
+  listingId      String?   @map("listing_id") @db.Uuid
+  productGroupId String?   @map("product_group_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  price          Decimal   @db.Decimal(14, 2)
+  currency       String
+  qty            Int       @default(1)
+  purchasedAt    DateTime  @map("purchased_at")
+  salePrice      Decimal?  @map("sale_price") @db.Decimal(14, 2)
+  soldAt         DateTime? @map("sold_at")
+  note           String?
+  listingSnapshot Json     @map("listing_snapshot")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  listing        Listing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  product        Product?  @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([productGroupId])
+  @@index([purchasedAt])
+  @@map("purchases")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String
+  payload   Json
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model TelegramLink {
+  userId   String   @id @map("user_id") @db.Uuid
+  chatId   String   @unique @map("chat_id")
+  linkedAt DateTime @default(now()) @map("linked_at")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("telegram_links")
+}
+
+model TelegramCode {
+  userId    String   @id @map("user_id") @db.Uuid
+  code      String   @unique
+  expiresAt DateTime @map("expires_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("telegram_codes")
+}
+
+model Setting {
+  key   String @id
+  value Json
+
+  @@map("settings")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  actor     User?    @relation("audit_actor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+model HealProposal {
+  id        String   @id @default(uuid()) @db.Uuid
+  siteId    String   @map("site_id") @db.Uuid
+  field     String
+  diff      Json
+  status    String   @default("pending")
+  createdAt DateTime @default(now()) @map("created_at")
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, status])
+  @@map("heal_proposals")
+}
+
+model BrowserShot {
+  id          String   @id @default(uuid()) @db.Uuid
+  siteId      String?  @map("site_id") @db.Uuid
+  url         String
+  status      String
+  imageBase64 String?  @map("image_base64")
+  boxes       Json?
+  error       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  site        Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@map("browser_shots")
+}

@@ -1,0 +1,36 @@
+# 04 — Data Model (PostgreSQL)  (Status: Implemented)
+
+- `users` (id, login, password_hash, role, is_active, created_at)
+- `sites` (id, name, domain, mode, url_template, parse_rules jsonb, enabled, priority)
+- `site_groups`, `site_group_members`
+- `searches` (id, user_id, query, filters jsonb, created_at)
+- `saved_searches` (id, user_id, query, filters, schedule, last_run_at)
+- `listings` (id, site_id, url unique, external_id, title, price, currency, location, posted_at, specs jsonb, image_url, first_seen_at, last_seen_at)
+- `listing_prices` (listing_id, price, seen_at) — price history
+- `products` (id, normalized_name, category, specs jsonb) — grouped product
+- `product_listings` (product_id, listing_id, match_score, manual)
+- `search_results` (search_id, listing_id, rank)
+- `visits` (user_id, listing_id, visited_at)
+- `listing_marks` (user_id, listing_id, status, note, tags)
+- `duplicates` (listing_id, original_listing_id, reason)
+- `settings` (key, value jsonb), `audit_log`
+- `user_site_selection` (user_id, site_id, selected) — last checkbox state
+- `search_templates` (id, owner_id, name, query, site_ids int[], filters jsonb, sort, shared, schedule)
+- `site_config_versions` (site_id, version, config jsonb, created_by, created_at)
+- `site_field_strategies` inside config: field -> ordered list of strategies + sample values
+- `site_health` (site_id, checked_at, status, error)
+- `telegram_links` (user_id, chat_id, linked_at)
+- `notifications` (id, user_id, type, payload jsonb, read_at, created_at)
+- `template_schedules` (template_id, cron, enabled, notify_rules jsonb, last_run_at)
+- `schedule_runs` (id, template_id, started_at, finished_at, new_count, changed_count, errors jsonb)
+- `sites` additional columns: poll_interval_minutes, max_concurrency, paused_until
+- `purchases` (id, listing_id, product_group_id, user_id, price, currency, qty, purchased_at, sale_price, sold_at, note, listing_snapshot jsonb)
+- `sessions` (id, user_id, token_hash, expires_at) — opaque session tokens, only the hash is stored
+- `listing_notes` (id, listing_id, user_id, body, shared) — private notes stay with the author; statuses stay on `listing_marks` and are shared
+- `search_site_runs` (search_id, site_id, status, error, result_count, from_cache)
+- `search_cache` (site_id, cache_key, fetched_at, listing_ids) — reused until `poll_interval_minutes` elapses
+- `telegram_codes` (user_id, code, expires_at)
+- `heal_proposals` (site_id, field, diff, status)
+- `browser_shots` (url, status, image_base64, boxes)
+- `users` also stores `language` (default `en`) and `theme` (`light` | `dark` | `system`)
+- `sites.key` is the stable adapter id. Physical column names are snake_case.

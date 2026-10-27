@@ -1,0 +1,29 @@
+{
+  "name": "pricelens",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "ci": "pnpm generate && pnpm typecheck && pnpm test && pnpm test:integration",
+    "generate": "pnpm --filter @pricelens/db generate",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:integration": "pnpm --filter @pricelens/db test:integration && pnpm --filter @pricelens/pipeline test:integration && pnpm --filter @pricelens/api test:integration",
+    "test:e2e": "pnpm --filter @pricelens/web test:e2e",
+    "dev": "turbo dev",
+    "lint": "eslint .",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "eslint": "^9.28.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.0"
+  }
+}

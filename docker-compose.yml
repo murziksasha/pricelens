@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pricelens
+      POSTGRES_PASSWORD: pricelens
+      POSTGRES_DB: pricelens
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pricelens -d pricelens"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://pricelens:pricelens@postgres:5432/pricelens
+      ADMIN_LOGIN: admin
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      PORT: 3000
+      INLINE_SEARCH: "0"
+      LAN_ONLY: "true"
+      BACKUP_DIR: /backups
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    volumes:
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://pricelens:pricelens@postgres:5432/pricelens
+      BACKUP_DIR: /backups
+      BACKUP_AUTORUN: "1"
+      HEALTH_AUTORUN: "0"
+      NODE_ENV: production
+    volumes:
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  backups:

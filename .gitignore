@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+*.log
+coverage/
+playwright-report/
+test-results/
+.turbo/
+apps/web/dist/
+backups/*.gz
+backups/*.dump
+*.tsbuildinfo
