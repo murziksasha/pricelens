@@ -57,6 +57,7 @@ export class RequestLayer {
       random?: () => number;
       proxy?: ProxyHook;
       onPause?: (siteId: string, reason: string) => void | Promise<void>;
+      timeoutMs?: number;
     } = {},
   ) {}
 
@@ -112,8 +113,22 @@ export class RequestLayer {
           init = decorated.init;
         }
         const fetchImpl = this.opts.fetchImpl ?? fetch;
-        const response = await fetchImpl(target, init);
-        const text = await response.text();
+        const controller = new AbortController();
+        const timeoutMs = this.opts.timeoutMs ?? 20_000;
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        let response: Response;
+        let text: string;
+        try {
+          response = await fetchImpl(target, { ...init, signal: controller.signal });
+          text = await response.text();
+        } catch (err: unknown) {
+          if (controller.signal.aborted || (err as { name?: string })?.name === 'AbortError') {
+            throw new Error('timeout');
+          }
+          throw err;
+        } finally {
+          clearTimeout(timer);
+        }
         if (isBlocked(response.status, text)) {
           attempt += 1;
           if (attempt >= 3) {

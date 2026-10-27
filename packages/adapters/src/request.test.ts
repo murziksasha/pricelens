@@ -88,4 +88,20 @@ describe('RequestLayer', () => {
     expect(result.status).toBe(200);
     expect(result.text).toContain('ok');
   });
+
+  it('aborts fetch after timeout and maps to timeout error', async () => {
+    const layer = new RequestLayer({
+      timeoutMs: 50,
+      fetchImpl: (_url, init) =>
+        new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            const err = new Error('The operation was aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        }),
+    });
+    const site = { id: 'slow', maxConcurrency: 1, minDelayMs: 0 };
+    await expect(layer.getText(site, 'https://example.test/slow')).rejects.toThrow('timeout');
+  });
 });

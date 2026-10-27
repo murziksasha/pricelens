@@ -151,26 +151,89 @@ async function drain() {
   }
 }
 
+async function drainHealth() {
+  const queued = await prisma.healthRun.findFirst({
+    where: { status: 'queued' },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (!queued) return;
+  const claim = await prisma.healthRun.updateMany({
+    where: { id: queued.id, status: 'queued' },
+    data: { status: 'running', startedAt: new Date() },
+  });
+  if (claim.count !== 1) return;
+
+  try {
+    const sites = await prisma.site.findMany({ where: { enabled: true }, orderBy: { name: 'asc' } });
+    for (const site of sites) {
+      try {
+        await checkSite(prisma, site.id, load);
+      } catch (siteErr) {
+        console.error(`checkSite failed for site ${site.id}:`, siteErr);
+      }
+      await prisma.healthRun.update({
+        where: { id: queued.id },
+        data: { done: { increment: 1 } },
+      });
+    }
+    await prisma.healthRun.update({
+      where: { id: queued.id },
+      data: { status: 'complete', finishedAt: new Date() },
+    });
+  } catch (error) {
+    console.error('health_run_error', error);
+    await prisma.healthRun.update({
+      where: { id: queued.id },
+      data: { status: 'error', finishedAt: new Date() },
+    });
+  }
+}
+
+async function maybeScheduleHealthRun() {
+  const inProgress = await prisma.healthRun.findFirst({
+    where: { status: { in: ['queued', 'running'] } },
+  });
+  if (inProgress) return;
+
+  const latestComplete = await prisma.healthRun.findFirst({
+    where: { status: 'complete' },
+    orderBy: { finishedAt: 'desc' },
+  });
+  const sixtyMinAgo = new Date(Date.now() - 60 * 60_000);
+  if (!latestComplete || (latestComplete.finishedAt ?? latestComplete.createdAt) < sixtyMinAgo) {
+    const total = await prisma.site.count({ where: { enabled: true } });
+    await prisma.healthRun.create({
+      data: {
+        status: 'queued',
+        total,
+        done: 0,
+      },
+    });
+  }
+}
+
 async function main() {
   const loaded = (await import('pg-boss')) as unknown as { default: new (url: string) => any };
   const PgBoss = loaded.default;
   const queue = new PgBoss(process.env.DATABASE_URL || '');
   await queue.start();
   await queue.createQueue('search').catch(() => undefined);
+  await queue.createQueue('health').catch(() => undefined);
   await queue.work('search', async () => {
     await drain();
   });
+  await queue.work('health', async () => {
+    await drainHealth();
+  });
   const tick = async () => {
     await drain();
+    await maybeScheduleHealthRun().catch((error) => console.error(error));
+    await drainHealth().catch((error) => console.error(error));
     await runDueSchedules(prisma, { load: load }).catch((error) => console.error(error));
     await pollTelegram().catch((error) => console.error(error));
     await dispatchEmailNotifications(prisma).catch((error) => console.error(error));
     await shots().catch((error) => console.error(error));
   };
-  if (process.env.HEALTH_AUTORUN === '1') {
-    const sites = await prisma.site.findMany({ where: { enabled: true } });
-    for (const site of sites) await checkSite(prisma, site.id, load).catch((error) => console.error(error));
-  }
   await maybeBackup().catch((error) => console.error(error));
   setInterval(() => {
     tick().catch((error) => console.error(error));

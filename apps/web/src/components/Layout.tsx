@@ -1,12 +1,21 @@
 import type { Locale } from '@pricelens/shared';
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import type { Me } from '../App';
 import { api } from '../lib/api';
 import { usePrefs } from '../lib/i18n';
 
-export function Layout({ me, onLogout }: { me: Me; onLogout: () => void }) {
+export function Layout({
+  me,
+  onLogout,
+  refreshMe,
+}: {
+  me: Me;
+  onLogout: () => void;
+  refreshMe?: () => Promise<Me | null>;
+}) {
   const { t, locale, setLocale, theme, setTheme } = usePrefs();
+  const location = useLocation();
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -38,7 +47,13 @@ export function Layout({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <NavLink to="/templates">{t('nav.templates')}</NavLink>
           <NavLink to="/purchases">{t('nav.purchases')}</NavLink>
           {me.role === 'admin' && (
-            <NavLink to="/admin/users" data-testid="admin-nav">{t('nav.admin')}</NavLink>
+            <NavLink
+              to="/admin/users"
+              data-testid="admin-nav"
+              className={({ isActive }) => (isActive || location.pathname.startsWith('/admin') ? 'active' : undefined)}
+            >
+              {t('nav.admin')}
+            </NavLink>
           )}
         </nav>
         <span className="spacer" />
@@ -74,7 +89,7 @@ export function Layout({ me, onLogout }: { me: Me; onLogout: () => void }) {
         </button>
         <button type="button" onClick={onLogout}>{t('nav.logout')}</button>
       </header>
-      <Outlet />
+      <Outlet context={{ me, refreshMe }} />
       {open && (
         <div className="drawer">
           <div className="row">

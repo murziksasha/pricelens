@@ -12,6 +12,7 @@ async function boss() {
       const queue = new PgBoss(process.env.DATABASE_URL || '');
       await queue.start();
       await queue.createQueue('search').catch(() => undefined);
+      await queue.createQueue('health').catch(() => undefined);
       return queue;
     })();
   }
@@ -23,6 +24,15 @@ export async function publishSearch(searchId: string) {
   try {
     const queue = await boss();
     await queue.send('search', { searchId });
+  } catch (error) {
+    console.error('queue_send_failed', error);
+  }
+}
+
+export async function publishHealth(runId: string) {
+  try {
+    const queue = await boss();
+    await queue.send('health', { runId });
   } catch (error) {
     console.error('queue_send_failed', error);
   }

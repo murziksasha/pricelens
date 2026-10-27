@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { usePrefs } from '../lib/i18n';
+import { ProgressBar } from '../components/ProgressBar';
 
 interface SiteRow { id: string; name: string; selected: boolean; enabled: boolean }
 interface GroupRow { id: string; name: string; siteIds: string[] }
@@ -14,7 +15,7 @@ interface ResultRow {
   location: string | null;
   condition: string;
   imageUrl: string | null;
-  visited: { login: string; visitedAt: string } | null;
+  visited: { login: string | null; visitedAt: string } | null;
   mark: string | null;
   duplicateOf: string | null;
   priceDropped: boolean;
@@ -51,6 +52,8 @@ export function SearchPage() {
   const [note, setNote] = useState('');
   const [cols, setCols] = useState<string[]>(() => JSON.parse(localStorage.getItem('pricelens.cols') || 'null') || [...COLUMNS]);
   const [filter, setFilter] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [savingPurchase, setSavingPurchase] = useState(false);
 
   useEffect(() => {
     api<{ sites: SiteRow[]; groups: GroupRow[] }>('/api/me/sites').then((data) => {
@@ -74,26 +77,32 @@ export function SearchPage() {
   async function search() {
     const siteIds = sites.filter((site) => site.selected).map((site) => site.id);
     if (!query || siteIds.length === 0) return;
-    const created = await api<{ id: string }>('/api/searches', {
-      method: 'POST',
-      body: JSON.stringify({
-        query,
-        siteIds,
-        filters: {
-          priceMin: priceMin ? Number(priceMin) : null,
-          priceMax: priceMax ? Number(priceMax) : null,
-          condition: condition || null,
-          city: city || null,
-        },
-      }),
-    });
-    let done = false;
-    while (!done) {
-      const view = await api<{ done: boolean; rows: ResultRow[]; runs: typeof runs }>(`/api/searches/${created.id}`);
-      setRows(view.rows);
-      setRuns(view.runs);
-      done = view.done;
-      if (!done) await new Promise((resolve) => setTimeout(resolve, 400));
+    setSearching(true);
+    setRuns([]);
+    try {
+      const created = await api<{ id: string }>('/api/searches', {
+        method: 'POST',
+        body: JSON.stringify({
+          query,
+          siteIds,
+          filters: {
+            priceMin: priceMin ? Number(priceMin) : null,
+            priceMax: priceMax ? Number(priceMax) : null,
+            condition: condition || null,
+            city: city || null,
+          },
+        }),
+      });
+      let done = false;
+      while (!done) {
+        const view = await api<{ done: boolean; rows: ResultRow[]; runs: typeof runs }>(`/api/searches/${created.id}`);
+        setRows(view.rows);
+        setRuns(view.runs);
+        done = view.done;
+        if (!done) await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    } finally {
+      setSearching(false);
     }
   }
 
@@ -166,6 +175,20 @@ export function SearchPage() {
           <input placeholder={t('results.filter')} value={filter} onChange={(event) => setFilter(event.target.value)} />
           <button type="button" onClick={() => setCompare(true)}>{t('compare.title')}</button>
         </form>
+        {searching && (
+          runs.length > 0 ? (
+            <ProgressBar
+              value={runs.filter((run) => run.status === 'complete' || run.status === 'error').length}
+              max={runs.length}
+              label={t('search.progress', {
+                done: runs.filter((run) => run.status === 'complete' || run.status === 'error').length,
+                total: runs.length,
+              })}
+            />
+          ) : (
+            <ProgressBar />
+          )
+        )}
         <p className="muted">{t('shortcuts.hint')}</p>
         {runs.some((run) => run.status === 'error') && (
           <p className="error">{t('search.partial')}: {runs.filter((run) => run.error).map((run) => `${run.siteName} (${run.error})`).join(', ')}</p>
@@ -215,7 +238,7 @@ export function SearchPage() {
                     {cols.includes('title') && (
                       <td>
                         {row.imageUrl && <img className="thumb" alt="" src={row.imageUrl} />} {row.title}
-                        {row.visited && <span className="badge">{t('results.openedBy', { user: row.visited.login, date: row.visited.visitedAt.slice(0, 10) })}</span>}
+                        {row.visited && <span className="badge">{t('results.openedBy', { user: row.visited.login || t('users.deletedAccount'), date: row.visited.visitedAt.slice(0, 10) })}</span>}
                         {row.duplicateOf && <span className="badge">{t('results.duplicate')}</span>}
                         {row.priceDropped && <span className="badge warn">{t('results.priceDrop')}</span>}
                         {row.bought && <span className="badge">{t('purchase.badge', { count: row.bought.count, price: row.bought.lastPrice, date: row.bought.lastAt.slice(0, 10) })}</span>}
@@ -242,7 +265,7 @@ export function SearchPage() {
               })}
             </tbody>
           </table>
-          {visible.length === 0 && <p className="muted">{t('search.noResults')}</p>}
+          {!searching && visible.length === 0 && <p className="muted">{t('search.noResults')}</p>}
         </div>
       </section>
       {compare && (
@@ -272,21 +295,26 @@ export function SearchPage() {
           className="drawer stack"
           onSubmit={async (event) => {
             event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            await api('/api/purchases', {
-              method: 'POST',
-              body: JSON.stringify({
-                listingId: buy.listingId,
-                price: Number(data.get('price')),
-                qty: Number(data.get('qty') || 1),
-                note: String(data.get('note') || ''),
-                currency: buy.currency,
-              }),
-            });
-            if (note) {
-              await api(`/api/listings/${buy.listingId}/notes`, { method: 'POST', body: JSON.stringify({ body: note, shared: false }) });
+            setSavingPurchase(true);
+            try {
+              const data = new FormData(event.currentTarget);
+              await api('/api/purchases', {
+                method: 'POST',
+                body: JSON.stringify({
+                  listingId: buy.listingId,
+                  price: Number(data.get('price')),
+                  qty: Number(data.get('qty') || 1),
+                  note: String(data.get('note') || ''),
+                  currency: buy.currency,
+                }),
+              });
+              if (note) {
+                await api(`/api/listings/${buy.listingId}/notes`, { method: 'POST', body: JSON.stringify({ body: note, shared: false }) });
+              }
+              setBuy(null);
+            } finally {
+              setSavingPurchase(false);
             }
-            setBuy(null);
           }}
         >
           <strong>{t('purchase.formTitle')}</strong>
@@ -294,9 +322,10 @@ export function SearchPage() {
           <label className="field">{t('common.quantity')}<input name="qty" defaultValue={1} /></label>
           <label className="field">{t('common.note')}<input name="note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
           <div className="row">
-            <button className="primary" type="submit">{t('common.save')}</button>
+            <button className="primary" type="submit" disabled={savingPurchase}>{t('common.save')}</button>
             <button type="button" onClick={() => setBuy(null)}>{t('common.cancel')}</button>
           </div>
+          {savingPurchase && <ProgressBar />}
         </form>
       )}
     </div>

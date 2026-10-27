@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import type { Me } from '../App';
 import { ApiError, api, serverBase } from '../lib/api';
 import { usePrefs } from '../lib/i18n';
+import { ProgressBar } from '../components/ProgressBar';
 
 export function LoginPage({ onIn }: { onIn: (user: Me) => void }) {
   const { t, locale, setLocale, theme, setTheme } = usePrefs();
@@ -10,6 +11,7 @@ export function LoginPage({ onIn }: { onIn: (user: Me) => void }) {
   const [server, setServer] = useState(localStorage.getItem('pricelens.server') || '');
   const [error, setError] = useState('');
   const [probe, setProbe] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   async function probeServer(url: string): Promise<boolean> {
     try {
@@ -67,6 +69,7 @@ export function LoginPage({ onIn }: { onIn: (user: Me) => void }) {
     event.preventDefault();
     localStorage.setItem('pricelens.server', server.trim());
     setError('');
+    setSubmitting(true);
     try {
       const session = await api<{ token: string; user: Me }>('/api/auth/login', {
         method: 'POST',
@@ -80,6 +83,8 @@ export function LoginPage({ onIn }: { onIn: (user: Me) => void }) {
           ? t(err.code === 'inactive_user' ? 'auth.inactive' : err.code === 'rate_limited' ? 'errors.rateLimited' : 'auth.failed')
           : t('common.error'),
       );
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -129,9 +134,10 @@ export function LoginPage({ onIn }: { onIn: (user: Me) => void }) {
         />
       </label>
       {error && <p className="error">{error}</p>}
-      <button className="primary" type="submit">
+      <button className="primary" type="submit" disabled={submitting}>
         {t('auth.submit')}
       </button>
+      {submitting && <ProgressBar />}
       <div className="row">
         <select
           aria-label={t('lang.en')}

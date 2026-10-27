@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { usePrefs } from '../lib/i18n';
+import { ProgressBar } from '../components/ProgressBar';
 
 interface Template {
   id: string;
@@ -19,6 +20,8 @@ export function TemplatesPage() {
   const [query, setQuery] = useState('');
   const [siteIds, setSiteIds] = useState<string[]>([]);
   const [message, setMessage] = useState('');
+  const [runningId, setRunningId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   function load() {
     api<Template[]>('/api/templates').then(setRows);
@@ -34,6 +37,29 @@ export function TemplatesPage() {
     setName('');
     setQuery('');
     load();
+  }
+
+  async function runTemplate(templateId: string) {
+    setRunningId(templateId);
+    setProgress(null);
+    setMessage('');
+    try {
+      const result = await api<{ id: string }>(`/api/templates/${templateId}/run`, { method: 'POST' });
+      let done = false;
+      while (!done) {
+        const view = await api<{ done: boolean; runs: Array<{ siteName: string; status: string; error: string | null }> }>(`/api/searches/${result.id}`);
+        const total = view.runs.length;
+        const finished = view.runs.filter((r) => r.status === 'complete' || r.status === 'error').length;
+        setProgress({ done: finished, total });
+        done = view.done;
+        if (!done) await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      setMessage(result.id);
+      load();
+    } finally {
+      setRunningId(null);
+      setProgress(null);
+    }
   }
 
   return (
@@ -54,26 +80,39 @@ export function TemplatesPage() {
       </form>
       {message && <p>{message}</p>}
       {rows.map((row) => (
-        <article key={row.id} className="card row">
-          <strong>{row.name}</strong>
-          <span>{row.query}</span>
-          <span className="muted">{row.shared ? t('templates.shared') : t('templates.personal')}</span>
-          <span className="muted">{row.schedule?.lastRunAt ? row.schedule.lastRunAt.slice(0, 16) : ''}</span>
-          <button type="button" onClick={async () => { const result = await api<{ id: string }>(`/api/templates/${row.id}/run`, { method: 'POST' }); setMessage(result.id); }}>{t('templates.run')}</button>
-          <button type="button" onClick={async () => { await api(`/api/templates/${row.id}/duplicate`, { method: 'POST' }); load(); }}>{t('templates.duplicate')}</button>
-          <button
-            type="button"
-            onClick={async () => {
-              await api(`/api/templates/${row.id}/schedule`, {
-                method: 'PUT',
-                body: JSON.stringify({ enabled: true, intervalMinutes: 60, notifyRules: { onlyNew: true, priceDrop: true, dealThreshold: true } }),
-              });
-              load();
-            }}
-          >
-            {t('templates.schedule')}
-          </button>
-          <button type="button" onClick={async () => { const code = await api<{ code: string }>('/api/telegram/code', { method: 'POST' }); setMessage(`${t('notifications.linkCode')}: ${code.code}`); }}>{t('notifications.telegram')}</button>
+        <article key={row.id} className="card stack">
+          <div className="row">
+            <strong>{row.name}</strong>
+            <span>{row.query}</span>
+            <span className="muted">{row.shared ? t('templates.shared') : t('templates.personal')}</span>
+            <span className="muted">{row.schedule?.lastRunAt ? row.schedule.lastRunAt.slice(0, 16) : ''}</span>
+            <button type="button" disabled={runningId === row.id} onClick={() => runTemplate(row.id)}>{t('templates.run')}</button>
+            <button type="button" onClick={async () => { await api(`/api/templates/${row.id}/duplicate`, { method: 'POST' }); load(); }}>{t('templates.duplicate')}</button>
+            <button
+              type="button"
+              onClick={async () => {
+                await api(`/api/templates/${row.id}/schedule`, {
+                  method: 'PUT',
+                  body: JSON.stringify({ enabled: true, intervalMinutes: 60, notifyRules: { onlyNew: true, priceDrop: true, dealThreshold: true } }),
+                });
+                load();
+              }}
+            >
+              {t('templates.schedule')}
+            </button>
+            <button type="button" onClick={async () => { const code = await api<{ code: string }>('/api/telegram/code', { method: 'POST' }); setMessage(`${t('notifications.linkCode')}: ${code.code}`); }}>{t('notifications.telegram')}</button>
+          </div>
+          {runningId === row.id && (
+            progress && progress.total > 0 ? (
+              <ProgressBar
+                value={progress.done}
+                max={progress.total}
+                label={t('search.progress', { done: progress.done, total: progress.total })}
+              />
+            ) : (
+              <ProgressBar />
+            )
+          )}
         </article>
       ))}
     </div>

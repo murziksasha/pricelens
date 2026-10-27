@@ -8,7 +8,7 @@ interface Purchase {
   currency: string;
   qty: number;
   purchasedAt: string;
-  buyer: string;
+  buyer: string | null;
   margin: number | null;
   snapshot: { title?: string; site?: string };
 }
@@ -26,7 +26,10 @@ export function PurchasesPage() {
         <button
           type="button"
           onClick={() => {
-            const lines = ['title,price,buyer,margin', ...data.items.map((row) => `${row.snapshot?.title ?? ''},${row.price},${row.buyer},${row.margin ?? ''}`)];
+            const lines = [
+              'title,price,buyer,margin',
+              ...data.items.map((row) => `${row.snapshot?.title ?? ''},${row.price},${row.buyer || t('users.deletedAccount')},${row.margin ?? ''}`),
+            ];
             const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -55,7 +58,7 @@ export function PurchasesPage() {
             <tr key={row.id}>
               <td>{row.snapshot?.title}</td>
               <td>{row.price} {row.currency}</td>
-              <td>{row.buyer}</td>
+              <td>{row.buyer || t('users.deletedAccount')}</td>
               <td>{row.margin ?? ''}</td>
               <td>{row.purchasedAt.slice(0, 10)}</td>
             </tr>

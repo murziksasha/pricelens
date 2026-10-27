@@ -78,8 +78,9 @@ Built-in adapters/presets shipped in v1: OLX (olx.ua), Prom.ua, Bigl.ua, Hotline
   5. CSS/XPath as last resort only.
   Extraction uses the first strategy that returns a valid typed value; all are kept as fallbacks.
 - FR-CON-007 Self-healing: when extraction fails or values fail validation, the system re-locates the field by stored sample values/text features, proposes an updated mapping, and notifies the admin for one-click approval.
-- FR-CON-008 Health checks: scheduled test query per site; status green/yellow/red; failing sites auto-fall back to Google (ADR-0001).
+- FR-CON-008 Health checks: hourly scheduled background test query run per site (or on demand by admin via queued health runs); status green/yellow/red; failing sites auto-fall back to Google (ADR-0001).
 - FR-CON-009 Site configs are versioned (history, rollback) and exportable/importable as JSON.
+- FR-CON-010 Edit existing site in constructor: admin can select any existing site from a dropdown or via direct link from the Sites list, modify name, domain, or search URL (with probe query token replaced by {query}), and save back an updated config version while preserving existing parse rules.
 
 ## Product grouping rules (FR-GRP)
 - FR-GRP-001 A product group = brand + model + key specs (category-specific; laptops: CPU model, RAM, storage size, GPU). Example: "Dell Latitude 7490 / i7-8650U / 16GB / 512GB".

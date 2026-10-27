@@ -10,7 +10,7 @@
 - `products` (id, normalized_name, category, specs jsonb) — grouped product
 - `product_listings` (product_id, listing_id, match_score, manual)
 - `search_results` (search_id, listing_id, rank)
-- `visits` (user_id, listing_id, visited_at)
+- `visits` (user_id nullable with ON DELETE SET NULL, listing_id, visited_at)
 - `listing_marks` (user_id, listing_id, status, note, tags)
 - `duplicates` (listing_id, original_listing_id, reason)
 - `settings` (key, value jsonb), `audit_log`
@@ -19,14 +19,15 @@
 - `site_config_versions` (site_id, version, config jsonb, created_by, created_at)
 - `site_field_strategies` inside config: field -> ordered list of strategies + sample values
 - `site_health` (site_id, checked_at, status, error)
+- `health_runs` (id, status, total, done, started_at, finished_at, created_at) — background health check runs (queued | running | complete | error)
 - `telegram_links` (user_id, chat_id, linked_at)
 - `notifications` (id, user_id, type, payload jsonb, read_at, created_at)
 - `template_schedules` (template_id, cron, enabled, notify_rules jsonb, last_run_at)
 - `schedule_runs` (id, template_id, started_at, finished_at, new_count, changed_count, errors jsonb)
 - `sites` additional columns: poll_interval_minutes, max_concurrency, paused_until
-- `purchases` (id, listing_id, product_group_id, user_id, price, currency, qty, purchased_at, sale_price, sold_at, note, listing_snapshot jsonb)
+- `purchases` (id, listing_id, product_group_id, user_id nullable with ON DELETE SET NULL, price, currency, qty, purchased_at, sale_price, sold_at, note, listing_snapshot jsonb)
 - `sessions` (id, user_id, token_hash, expires_at) — opaque session tokens, only the hash is stored
-- `listing_notes` (id, listing_id, user_id, body, shared) — private notes stay with the author; statuses stay on `listing_marks` and are shared
+- `listing_notes` (id, listing_id, user_id nullable with ON DELETE SET NULL, body, shared) — private notes stay with the author and are removed on user delete; shared notes, purchases, and visits remain with null user_id; statuses stay on `listing_marks` and are shared
 - `search_site_runs` (search_id, site_id, status, error, result_count, from_cache)
 - `search_cache` (site_id, cache_key, fetched_at, listing_ids) — reused until `poll_interval_minutes` elapses
 - `telegram_codes` (user_id, code, expires_at)

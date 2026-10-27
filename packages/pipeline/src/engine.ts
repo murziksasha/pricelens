@@ -420,7 +420,7 @@ export async function searchRows(prisma: Db, searchId: string) {
       imageUrl: listing.imageUrl,
       specs: listing.specs ?? product?.specs ?? null,
       seller: listing.seller,
-      visited: visit ? { login: visit.user.login, visitedAt: visit.visitedAt.toISOString() } : null,
+      visited: visit ? { login: visit.user?.login ?? null, visitedAt: visit.visitedAt.toISOString() } : null,
       mark: listing.mark?.status ?? null,
       tags: listing.mark?.tags ?? [],
       duplicateOf: listing.dupOf?.originalListingId ?? null,

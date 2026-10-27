@@ -1,7 +1,9 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { NavLink, useParams } from 'react-router-dom';
-import { api } from '../lib/api';
+import { FormEvent, useEffect, useRef, useState } from 'react';
+import { NavLink, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
+import type { Me } from '../App';
+import { ApiError, api, download } from '../lib/api';
 import { usePrefs } from '../lib/i18n';
+import { ProgressBar } from '../components/ProgressBar';
 
 export function AdminPage() {
   const { t } = usePrefs();
@@ -32,40 +34,209 @@ export function AdminPage() {
 
 function Users() {
   const { t } = usePrefs();
+  const { me, refreshMe } = useOutletContext<{ me: Me; refreshMe?: () => Promise<Me | null> }>();
+  const navigate = useNavigate();
   const [rows, setRows] = useState<Array<{ id: string; login: string; role: string; isActive: boolean }>>([]);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('user');
-  function load() { api<typeof rows>('/api/users').then(setRows); }
+  const [creating, setCreating] = useState(false);
+  const [openPasswordId, setOpenPasswordId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordSavedId, setPasswordSavedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleError(err: unknown) {
+    if (err instanceof ApiError) {
+      if (err.code === 'last_admin') setError(t('errors.lastAdmin'));
+      else if (err.code === 'cannot_delete_self') setError(t('errors.cannotDeleteSelf'));
+      else if (err.code === 'validation_failed' || err.code === 'validation_error') setError(t('errors.validation'));
+      else setError(err.code);
+    } else {
+      setError(String(err));
+    }
+  }
+
+  function load() {
+    api<typeof rows>('/api/users').then(setRows).catch(handleError);
+  }
   useEffect(load, []);
+
   return (
     <div className="stack">
       <h1>{t('users.title')}</h1>
-      <form className="row" onSubmit={async (event) => { event.preventDefault(); await api('/api/users', { method: 'POST', body: JSON.stringify({ login, password, role }) }); setLogin(''); setPassword(''); load(); }}>
+      <form
+        className="row"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setError(null);
+          setCreating(true);
+          try {
+            await api('/api/users', { method: 'POST', body: JSON.stringify({ login, password, role }) });
+            setLogin('');
+            setPassword('');
+            load();
+          } catch (err) {
+            handleError(err);
+          } finally {
+            setCreating(false);
+          }
+        }}
+      >
         <input data-testid="new-login" placeholder={t('auth.login')} value={login} onChange={(event) => setLogin(event.target.value)} />
         <input data-testid="new-password" placeholder={t('auth.password')} value={password} onChange={(event) => setPassword(event.target.value)} />
         <select value={role} onChange={(event) => setRole(event.target.value)}>
           <option value="user">{t('roles.user')}</option>
           <option value="admin">{t('roles.admin')}</option>
         </select>
-        <button className="primary" type="submit">{t('users.create')}</button>
+        <button className="primary" type="submit" disabled={creating}>{t('users.create')}</button>
       </form>
+      {creating && <ProgressBar />}
       <table className="grid">
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
               <td>{row.login}</td>
-              <td>{row.role}</td>
+              <td>
+                <select
+                  value={row.role}
+                  onChange={async (event) => {
+                    setError(null);
+                    const nextRole = event.target.value;
+                    try {
+                      await api(`/api/users/${row.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ role: nextRole }),
+                      });
+                      if (row.id === me?.id && nextRole !== 'admin') {
+                        const updated = await refreshMe?.();
+                        if (!updated || updated.role !== 'admin') {
+                          navigate('/');
+                          return;
+                        }
+                      }
+                      load();
+                    } catch (err) {
+                      handleError(err);
+                    }
+                  }}
+                >
+                  <option value="user">{t('roles.user')}</option>
+                  <option value="admin">{t('roles.admin')}</option>
+                </select>
+              </td>
               <td>{row.isActive ? t('users.active') : t('common.no')}</td>
               <td>
-                <button type="button" onClick={async () => { await api(`/api/users/${row.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !row.isActive }) }); load(); }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setError(null);
+                    try {
+                      await api(`/api/users/${row.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ isActive: !row.isActive }),
+                      });
+                      if (row.id === me?.id && row.isActive) {
+                        const updated = await refreshMe?.();
+                        if (!updated || updated.role !== 'admin') {
+                          navigate('/');
+                          return;
+                        }
+                      }
+                      load();
+                    } catch (err) {
+                      handleError(err);
+                    }
+                  }}
+                >
                   {row.isActive ? t('users.deactivate') : t('users.activate')}
                 </button>
+              </td>
+              <td>
+                {openPasswordId === row.id ? (
+                  <span className="row">
+                    <input
+                      type="password"
+                      placeholder={t('users.newPassword')}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setError(null);
+                        if (newPassword.length < 8) {
+                          setError(t('errors.validation'));
+                          return;
+                        }
+                        try {
+                          await api(`/api/users/${row.id}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify({ password: newPassword }),
+                          });
+                          setPasswordSavedId(row.id);
+                          setOpenPasswordId(null);
+                          setNewPassword('');
+                          setTimeout(() => setPasswordSavedId(null), 3000);
+                        } catch (err) {
+                          handleError(err);
+                        }
+                      }}
+                    >
+                      {t('common.save')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenPasswordId(null);
+                        setNewPassword('');
+                      }}
+                    >
+                      {t('common.close')}
+                    </button>
+                  </span>
+                ) : (
+                  <span className="row">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenPasswordId(row.id);
+                        setNewPassword('');
+                        setError(null);
+                      }}
+                    >
+                      {t('users.resetPassword')}
+                    </button>
+                    {passwordSavedId === row.id && <span className="muted">{t('users.passwordSaved')}</span>}
+                  </span>
+                )}
+              </td>
+              <td>
+                {row.id !== me?.id && (
+                  <button
+                    type="button"
+                    aria-label={t('users.delete')}
+                    onClick={async () => {
+                      setError(null);
+                      if (confirm(t('users.deleteConfirm'))) {
+                        try {
+                          await api(`/api/users/${row.id}`, { method: 'DELETE' });
+                          load();
+                        } catch (err) {
+                          handleError(err);
+                        }
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }
@@ -76,12 +247,20 @@ function Sites() {
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
   const [urlTemplate, setUrlTemplate] = useState('https://example.test/search?q={query}');
+  const [creating, setCreating] = useState(false);
   function load() { api<typeof rows>('/api/sites').then(setRows); }
   useEffect(load, []);
   async function create(event: FormEvent) {
     event.preventDefault();
-    await api('/api/sites', { method: 'POST', body: JSON.stringify({ key: name.toLowerCase().replace(/\s+/g, '-'), name, domain, mode: 'native', urlTemplate }) });
-    load();
+    setCreating(true);
+    try {
+      await api('/api/sites', { method: 'POST', body: JSON.stringify({ key: name.toLowerCase().replace(/\s+/g, '-'), name, domain, mode: 'native', urlTemplate }) });
+      setName('');
+      setDomain('');
+      load();
+    } finally {
+      setCreating(false);
+    }
   }
   return (
     <div className="stack">
@@ -91,12 +270,14 @@ function Sites() {
         <input data-testid="site-domain" placeholder={t('sites.domain')} value={domain} onChange={(event) => setDomain(event.target.value)} />
         <input placeholder={t('sites.urlTemplate')} value={urlTemplate} onChange={(event) => setUrlTemplate(event.target.value)} />
         <p className="muted">{t('sites.templateHelp')}</p>
-        <button className="primary" type="submit">{t('sites.new')}</button>
+        <button className="primary" type="submit" disabled={creating}>{t('sites.new')}</button>
       </form>
+      {creating && <ProgressBar />}
       {rows.map((row) => (
         <article key={row.id} className="card row">
           <strong>{row.name}</strong>
           <span>{row.domain}</span>
+          <NavLink to={`/admin/constructor?site=${row.id}`}>{t('sites.editConstructor')}</NavLink>
           <button type="button" onClick={async () => { await api(`/api/sites/${row.id}`, { method: 'PATCH', body: JSON.stringify({ ...row, enabled: !row.enabled }) }); load(); }}>{row.enabled ? t('common.enabled') : t('common.no')}</button>
           <button type="button" onClick={() => api(`/api/sites/${row.id}/export`)}>{t('sites.export')}</button>
           <button type="button" onClick={async () => { if (confirm(t('sites.deleteConfirm'))) { await api(`/api/sites/${row.id}`, { method: 'DELETE' }); load(); } }}>{t('common.delete')}</button>
@@ -108,6 +289,13 @@ function Sites() {
 
 function Constructor() {
   const { t } = usePrefs();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const siteParam = searchParams.get('site') || '';
+
+  const [sites, setSites] = useState<Array<any>>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState(siteParam);
+  const [loadedSite, setLoadedSite] = useState<any>(null);
+
   const [url, setUrl] = useState('');
   const [token, setToken] = useState('test123');
   const [html, setHtml] = useState('');
@@ -115,22 +303,189 @@ function Constructor() {
   const [param, setParam] = useState('');
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
+  const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api<any[]>('/api/sites').then((list) => {
+      setSites(list);
+      if (siteParam) {
+        const found = list.find((s) => s.id === siteParam);
+        if (found) {
+          setSelectedSiteId(found.id);
+          setLoadedSite(found);
+          setName(found.name);
+          setDomain(found.domain);
+          setUrl(found.urlTemplate);
+        }
+      }
+    });
+  }, [siteParam]);
+
+  function onSelectSite(id: string) {
+    setSelectedSiteId(id);
+    setSaved(false);
+    if (!id) {
+      setSearchParams({});
+      setLoadedSite(null);
+      setName('');
+      setDomain('');
+      setUrl('');
+      setParam('');
+      setItems([]);
+    } else {
+      setSearchParams({ site: id });
+      const found = sites.find((s) => s.id === id);
+      if (found) {
+        setLoadedSite(found);
+        setName(found.name);
+        setDomain(found.domain);
+        setUrl(found.urlTemplate);
+        setParam('');
+      }
+    }
+  }
+
+  function computeUrl() {
+    if (!url) return `https://${domain}/search?q={query}`;
+    if (token && url.includes(token)) {
+      return url.replaceAll(token, '{query}');
+    }
+    return url;
+  }
+
   return (
     <div className="stack">
       <h1>{t('constructor.title')}</h1>
+      <label className="field">
+        {t('constructor.pickSite')}
+        <select value={selectedSiteId} onChange={(e) => onSelectSite(e.target.value)}>
+          <option value="">{t('constructor.pickSite')}</option>
+          {sites.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name} ({s.domain})
+            </option>
+          ))}
+        </select>
+      </label>
       <p className="muted">{t('constructor.clickHelp')}</p>
-      <label className="field">{t('constructor.pasteUrl')}<input value={url} onChange={(event) => setUrl(event.target.value)} /></label>
-      <label className="field">{t('constructor.detect')}<input value={token} onChange={(event) => setToken(event.target.value)} /></label>
-      <button type="button" onClick={async () => setParam((await api<{ param: string | null }>('/api/admin/constructor/detect', { method: 'POST', body: JSON.stringify({ url, token }) })).param || '')}>{t('constructor.detect')}</button>
+      <label className="field">
+        {t('constructor.pasteUrl')}
+        <input
+          value={url}
+          onChange={(event) => {
+            setUrl(event.target.value);
+            setSaved(false);
+          }}
+        />
+      </label>
+      <label className="field">
+        {t('constructor.detect')}
+        <input
+          value={token}
+          onChange={(event) => setToken(event.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        onClick={async () => {
+          const res = await api<{ param: string | null }>('/api/admin/constructor/detect', {
+            method: 'POST',
+            body: JSON.stringify({ url, token }),
+          });
+          const found = res.param || '';
+          setParam(found);
+          if (found && token && url.includes(token)) {
+            setUrl(url.replaceAll(token, '{query}'));
+          }
+        }}
+      >
+        {t('constructor.detect')}
+      </button>
       {param && <p>{param}</p>}
       <textarea value={html} onChange={(event) => setHtml(event.target.value)} rows={6} />
-      <button type="button" onClick={async () => { const preview = await api<{ items: typeof items }>('/api/admin/constructor/preview', { method: 'POST', body: JSON.stringify({ url, html }) }); setItems(preview.items); }}>{t('constructor.preview')}</button>
+      <button
+        type="button"
+        disabled={previewing}
+        onClick={async () => {
+          setPreviewing(true);
+          try {
+            const preview = await api<{ items: typeof items }>('/api/admin/constructor/preview', {
+              method: 'POST',
+              body: JSON.stringify({ url, html }),
+            });
+            setItems(preview.items);
+          } finally {
+            setPreviewing(false);
+          }
+        }}
+      >
+        {t('constructor.preview')}
+      </button>
+      {previewing && <ProgressBar />}
       <table className="grid">
         <tbody>{items.map((item, index) => <tr key={index}><td>{item.title}</td><td>{item.price}</td></tr>)}</tbody>
       </table>
-      <input placeholder={t('common.name')} value={name} onChange={(event) => setName(event.target.value)} />
-      <input placeholder={t('sites.domain')} value={domain} onChange={(event) => setDomain(event.target.value)} />
-      <button className="primary" type="button" onClick={() => api('/api/admin/constructor/save', { method: 'POST', body: JSON.stringify({ name, domain, urlTemplate: url || `https://${domain}/search?q={query}`, parseRules: {} }) })}>{t('constructor.save')}</button>
+      <input
+        placeholder={t('common.name')}
+        value={name}
+        onChange={(event) => {
+          setName(event.target.value);
+          setSaved(false);
+        }}
+      />
+      <input
+        placeholder={t('sites.domain')}
+        value={domain}
+        onChange={(event) => {
+          setDomain(event.target.value);
+          setSaved(false);
+        }}
+      />
+      <button
+        className="primary"
+        type="button"
+        disabled={saving}
+        onClick={async () => {
+          setSaving(true);
+          setSaved(false);
+          const finalUrl = computeUrl();
+          try {
+            if (selectedSiteId && loadedSite) {
+              await api(`/api/sites/${selectedSiteId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                  ...loadedSite,
+                  name,
+                  domain,
+                  urlTemplate: finalUrl,
+                  mode: loadedSite.mode || 'native',
+                  parseRules: loadedSite.parseRules ?? {},
+                }),
+              });
+              setSaved(true);
+            } else {
+              await api('/api/admin/constructor/save', {
+                method: 'POST',
+                body: JSON.stringify({
+                  name,
+                  domain,
+                  urlTemplate: finalUrl,
+                  parseRules: {},
+                }),
+              });
+              setSaved(true);
+            }
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        {t('constructor.save')}
+      </button>
+      {saving && <ProgressBar />}
+      {saved && <p>{t('constructor.saved')}</p>}
     </div>
   );
 }
@@ -138,20 +493,90 @@ function Constructor() {
 function Health() {
   const { t } = usePrefs();
   const [rows, setRows] = useState<Array<{ siteId: string; name: string; status: string; lastError: string | null; successRate: number | null; latencyMs: number | null }>>([]);
-  function load() { api<typeof rows>('/api/admin/health').then(setRows); }
-  useEffect(load, []);
+  const [run, setRun] = useState<{ id: string; status: string; total: number; done: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    try {
+      const data = await api<{ sites: typeof rows; run: typeof run }>('/api/admin/health');
+      setRows(data.sites);
+      setRun(data.run);
+      return data.run;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.code : 'error');
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const isRunning = Boolean(run && (run.status === 'queued' || run.status === 'running'));
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const timer = setInterval(() => {
+      void load();
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isRunning]);
+
+  async function checkNow() {
+    setError(null);
+    try {
+      const newRun = await api<{ id: string; status: string; done: number; total: number }>('/api/admin/health/run', { method: 'POST' });
+      setRun(newRun);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.code : 'error');
+    }
+  }
+
   return (
     <div className="stack">
-      <div className="row"><h1>{t('health.title')}</h1><button type="button" onClick={async () => { await api('/api/admin/health/run', { method: 'POST' }); load(); }}>{t('health.checkNow')}</button></div>
+      <div className="row">
+        <h1>{t('health.title')}</h1>
+        <button type="button" disabled={isRunning} onClick={checkNow}>
+          {t('health.checkNow')}
+        </button>
+      </div>
+      {error && <p className="error">{error}</p>}
+      {isRunning && run && (
+        <ProgressBar
+          value={run.done}
+          max={run.total}
+          label={t('health.checking', { done: run.done, total: run.total })}
+        />
+      )}
       <table className="grid">
+        <thead>
+          <tr>
+            <th>{t('results.site')}</th>
+            <th>{t('common.status')}</th>
+            <th>{t('health.successRate')}</th>
+            <th>{t('health.latency')}</th>
+            <th>{t('health.lastError')}</th>
+          </tr>
+        </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.siteId}>
               <td>{row.name}</td>
-              <td>{row.status === 'green' ? t('health.green') : row.status === 'red' ? t('health.red') : row.status === 'yellow' ? t('health.yellow') : row.status}</td>
+              <td>
+                {row.status === 'green'
+                  ? t('health.green')
+                  : row.status === 'red'
+                  ? t('health.red')
+                  : row.status === 'yellow'
+                  ? t('health.yellow')
+                  : row.status === 'unknown'
+                  ? t('health.unknown')
+                  : row.status}
+              </td>
               <td>{row.successRate == null ? '' : `${Math.round(row.successRate * 100)}%`}</td>
               <td>{row.latencyMs ?? ''}</td>
-              <td>{row.lastError}</td>
+              <td>{row.lastError ?? ''}</td>
             </tr>
           ))}
         </tbody>
@@ -164,6 +589,7 @@ function Settings() {
   const { t } = usePrefs();
   const [form, setForm] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   function load() {
     api<Record<string, unknown>>('/api/admin/settings').then((data) => {
       const next: Record<string, string> = {};
@@ -177,6 +603,7 @@ function Settings() {
       className="stack"
       onSubmit={async (event) => {
         event.preventDefault();
+        setSaving(true);
         const body: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(form)) {
           body[key] = value === '***' || Number.isNaN(Number(value)) || value === '' ? value : Number(value);
@@ -195,9 +622,13 @@ function Settings() {
             body[key] = value;
           if (key === 'email_enabled') body[key] = value === 'true';
         }
-        await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
-        setSaved(true);
-        load();
+        try {
+          await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
+          setSaved(true);
+          load();
+        } finally {
+          setSaving(false);
+        }
       }}
     >
       <h1>{t('settings.title')}</h1>
@@ -314,9 +745,10 @@ function Settings() {
           onChange={(event) => setForm({ ...form, backup_cron: event.target.value })}
         />
       </label>
-      <button className="primary" type="submit">
+      <button className="primary" type="submit" disabled={saving}>
         {t('common.save')}
       </button>
+      {saving && <ProgressBar />}
       {saved && <p>{t('settings.saved')}</p>}
     </form>
   );
@@ -325,21 +757,113 @@ function Settings() {
 function Backups() {
   const { t } = usePrefs();
   const [rows, setRows] = useState<Array<{ name: string; size: number; kind: string }>>([]);
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   function load() { api<typeof rows>('/api/admin/backups').then(setRows); }
   useEffect(load, []);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    if (!confirm(t('backups.confirmRestore'))) return;
+    setError(null);
+    setRestoring(file.name);
+    try {
+      const bytes = await file.arrayBuffer();
+      const uploaded = await api<{ name: string }>('/api/admin/backups/upload', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/octet-stream',
+          'x-backup-name': file.name,
+        },
+        body: bytes,
+      });
+      await api(`/api/admin/backups/${uploaded.name}/restore`, {
+        method: 'POST',
+        body: JSON.stringify({ confirm: true }),
+      });
+      load();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'invalid_backup') {
+        setError(t('errors.invalidBackup'));
+      } else if (err instanceof ApiError) {
+        setError(err.code);
+      } else {
+        setError(String(err));
+      }
+    } finally {
+      setRestoring(null);
+    }
+  }
+
   return (
     <div className="stack">
       <div className="row">
         <h1>{t('backups.title')}</h1>
-        <button type="button" onClick={async () => { await api('/api/admin/backups', { method: 'POST' }); load(); }}>{t('backups.now')}</button>
+        <button
+          type="button"
+          disabled={backingUp}
+          onClick={async () => {
+            setBackingUp(true);
+            try {
+              await api('/api/admin/backups', { method: 'POST' });
+              load();
+            } finally {
+              setBackingUp(false);
+            }
+          }}
+        >
+          {t('backups.now')}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".dump,.sql,.sql.gz"
+          style={{ display: 'none' }}
+          onChange={handleFile}
+        />
+        <button
+          type="button"
+          disabled={Boolean(restoring) || backingUp}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {t('backups.restoreFromFile')}
+        </button>
       </div>
+      {error && <p className="error">{error}</p>}
+      {(backingUp || Boolean(restoring)) && <ProgressBar />}
       {rows.length === 0 && <p className="muted">{t('backups.empty')}</p>}
       {rows.map((row) => (
         <article key={row.name} className="row">
           <span>{row.name}</span>
           <span>{row.kind === 'auto' ? t('backups.typeAuto') : t('backups.typeManual')}</span>
           <span>{row.size}</span>
-          <button type="button" onClick={async () => { if (confirm(t('backups.confirmRestore'))) { await api(`/api/admin/backups/${row.name}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) }); } }}>{t('backups.restore')}</button>
+          <button
+            type="button"
+            onClick={() => download(`/api/admin/backups/${row.name}`, row.name)}
+          >
+            {t('backups.download')}
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(restoring)}
+            onClick={async () => {
+              if (confirm(t('backups.confirmRestore'))) {
+                setRestoring(row.name);
+                try {
+                  await api(`/api/admin/backups/${row.name}/restore`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+                } finally {
+                  setRestoring(null);
+                }
+              }
+            }}
+          >
+            {t('backups.restore')}
+          </button>
           <button type="button" onClick={async () => { await api(`/api/admin/backups/${row.name}`, { method: 'DELETE' }); load(); }}>{t('backups.delete')}</button>
         </article>
       ))}

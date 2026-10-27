@@ -19,7 +19,7 @@ async function reset(prisma: PrismaClient) {
       notifications, purchases, duplicates, listing_notes, listing_marks, visits,
       search_results, product_listings, products, listing_prices, listings,
       schedule_runs, template_schedules, search_templates, search_cache, search_site_runs,
-      searches, user_site_selection, site_health, site_config_versions, site_group_members,
+      searches, user_site_selection, site_health, health_runs, site_config_versions, site_group_members,
       site_groups, sessions, settings, sites, users
     RESTART IDENTITY CASCADE
   `);
@@ -178,5 +178,211 @@ describe.skipIf(!run)('API integration', () => {
     const link = await prisma.searchResult.findFirstOrThrow({ where: { listingId: listing.id } });
     const rows = await request(app.getHttpServer()).get(`/api/searches/${link.searchId}`).set('authorization', `Bearer ${viewer.body.token}`);
     expect(rows.body.rows.some((row: { visited: { login: string } | null }) => row.visited?.login === 'admin')).toBe(true);
+  });
+
+  it('enqueues a health run and returns current run status', async () => {
+    const admin = await request(app.getHttpServer()).post('/api/auth/login').send({ login: 'admin', password: 'test-password-123' });
+    const runRes = await request(app.getHttpServer())
+      .post('/api/admin/health/run')
+      .set('authorization', `Bearer ${admin.body.token}`);
+    expect(runRes.status).toBe(201);
+    expect(['queued', 'running']).toContain(runRes.body.status);
+    expect(typeof runRes.body.done).toBe('number');
+    expect(typeof runRes.body.id).toBe('string');
+    expect(runRes.body.total).toBeGreaterThan(0);
+
+    // Repeated call returns the in-progress run
+    const secondRes = await request(app.getHttpServer())
+      .post('/api/admin/health/run')
+      .set('authorization', `Bearer ${admin.body.token}`);
+    expect(secondRes.status).toBe(201);
+    expect(secondRes.body.id).toBe(runRes.body.id);
+
+    // GET /api/admin/health returns sites and latest run
+    const getRes = await request(app.getHttpServer())
+      .get('/api/admin/health')
+      .set('authorization', `Bearer ${admin.body.token}`);
+    expect(getRes.status).toBe(200);
+    expect(Array.isArray(getRes.body.sites)).toBe(true);
+    expect(['queued', 'running']).toContain(getRes.body.run?.status);
+  });
+
+  it('covers role change, password login, delete self rejected, last admin rejected, other user deleted, and purchase row preserved', async () => {
+    const adminLogin = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ login: 'admin', password: 'test-password-123' });
+    const adminToken = adminLogin.body.token;
+
+    // Create a new user
+    const createRes = await request(app.getHttpServer())
+      .post('/api/users')
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({ login: 'member', password: 'initial-password-123', role: 'user' });
+    expect(createRes.status).toBe(201);
+    const memberId = createRes.body.id;
+
+    // Role change to admin
+    const roleRes = await request(app.getHttpServer())
+      .patch(`/api/users/${memberId}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({ role: 'admin' });
+    expect(roleRes.status).toBe(200);
+    expect(roleRes.body.role).toBe('admin');
+
+    // Change member password and verify password login
+    const passRes = await request(app.getHttpServer())
+      .patch(`/api/users/${memberId}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({ password: 'new-secure-password-456' });
+    expect(passRes.status).toBe(200);
+
+    const memberLogin = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ login: 'member', password: 'new-secure-password-456' });
+    expect(memberLogin.status).toBe(201);
+    const memberToken = memberLogin.body.token;
+
+    // Demote member back to user
+    await request(app.getHttpServer())
+      .patch(`/api/users/${memberId}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({ role: 'user' });
+
+    // Delete self rejected
+    const meRes = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('authorization', `Bearer ${adminToken}`);
+    const adminId = meRes.body.id;
+
+    const delSelfRes = await request(app.getHttpServer())
+      .delete(`/api/users/${adminId}`)
+      .set('authorization', `Bearer ${adminToken}`);
+    expect(delSelfRes.status).toBe(400);
+    expect(delSelfRes.body.error).toBe('cannot_delete_self');
+
+    // Last admin rejected (demote by role)
+    const demoteLastAdminRes = await request(app.getHttpServer())
+      .patch(`/api/users/${adminId}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({ role: 'user' });
+    expect(demoteLastAdminRes.status).toBe(400);
+    expect(demoteLastAdminRes.body.error).toBe('last_admin');
+
+    // Last admin rejected (deactivate)
+    const deactLastAdminRes = await request(app.getHttpServer())
+      .patch(`/api/users/${adminId}`)
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({ isActive: false });
+    expect(deactLastAdminRes.status).toBe(400);
+    expect(deactLastAdminRes.body.error).toBe('last_admin');
+
+    // Create admin2, and admin deletes admin2 cleanly
+    const admin2Res = await request(app.getHttpServer())
+      .post('/api/users')
+      .set('authorization', `Bearer ${adminToken}`)
+      .send({ login: 'admin2', password: 'password-12345', role: 'admin' });
+    const admin2Id = admin2Res.body.id;
+
+    const delAdmin2Res = await request(app.getHttpServer())
+      .delete(`/api/users/${admin2Id}`)
+      .set('authorization', `Bearer ${adminToken}`);
+    expect(delAdmin2Res.status).toBe(200);
+
+    // Now test member data preservation and deletion
+    const listing = await prisma.listing.findFirstOrThrow();
+
+    // 1. Member creates purchase
+    const purchaseRes = await request(app.getHttpServer())
+      .post('/api/purchases')
+      .set('authorization', `Bearer ${memberToken}`)
+      .send({
+        listingId: listing.id,
+        price: 1500,
+        currency: 'UAH',
+        qty: 1,
+        purchasedAt: new Date().toISOString(),
+      });
+    expect(purchaseRes.status).toBe(201);
+
+    // 2. Member creates shared template and personal template
+    const olx = await prisma.site.findUniqueOrThrow({ where: { key: 'olx' } });
+    const sharedTpl = await prisma.searchTemplate.create({
+      data: {
+        ownerId: memberId,
+        name: 'Shared Tpl',
+        query: 'laptop',
+        siteIds: [olx.id],
+        filters: {},
+        shared: true,
+      },
+    });
+    const personalTpl = await prisma.searchTemplate.create({
+      data: {
+        ownerId: memberId,
+        name: 'Personal Tpl',
+        query: 'laptop',
+        siteIds: [olx.id],
+        filters: {},
+        shared: false,
+      },
+    });
+
+    // 3. Member creates shared note and private note
+    await request(app.getHttpServer())
+      .post(`/api/listings/${listing.id}/visit`)
+      .set('authorization', `Bearer ${memberToken}`);
+    await request(app.getHttpServer())
+      .post(`/api/listings/${listing.id}/notes`)
+      .set('authorization', `Bearer ${memberToken}`)
+      .send({ body: 'shared note from member', shared: true });
+    await request(app.getHttpServer())
+      .post(`/api/listings/${listing.id}/notes`)
+      .set('authorization', `Bearer ${memberToken}`)
+      .send({ body: 'private note from member', shared: false });
+
+    // 4. Admin deletes member
+    const delMemberRes = await request(app.getHttpServer())
+      .delete(`/api/users/${memberId}`)
+      .set('authorization', `Bearer ${adminToken}`);
+    expect(delMemberRes.status).toBe(200);
+
+    // Verify member is gone
+    const memberInDb = await prisma.user.findUnique({ where: { id: memberId } });
+    expect(memberInDb).toBeNull();
+
+    // Verify audit log has user.delete with login: member
+    const auditRecord = await prisma.auditLog.findFirst({
+      where: { action: 'user.delete', entityId: memberId },
+    });
+    expect(auditRecord).toBeDefined();
+    expect(auditRecord?.payload).toMatchObject({ login: 'member' });
+
+    // Verify shared template reassigned to acting admin
+    const reassignedTpl = await prisma.searchTemplate.findUnique({ where: { id: sharedTpl.id } });
+    expect(reassignedTpl?.ownerId).toBe(adminId);
+
+    // Verify personal template deleted
+    const personalInDb = await prisma.searchTemplate.findUnique({ where: { id: personalTpl.id } });
+    expect(personalInDb).toBeNull();
+
+    // Verify private note deleted
+    const privateNotes = await prisma.listingNote.findMany({ where: { body: 'private note from member' } });
+    expect(privateNotes.length).toBe(0);
+
+    // Verify shared note remains with userId = null
+    const sharedNotes = await prisma.listingNote.findMany({ where: { body: 'shared note from member' } });
+    expect(sharedNotes.length).toBe(1);
+    expect(sharedNotes[0].userId).toBeNull();
+
+    // Verify purchase row is still listed with deleted-account buyer (buyer is null)
+    const purchasesRes = await request(app.getHttpServer())
+      .get('/api/purchases')
+      .set('authorization', `Bearer ${adminToken}`);
+    expect(purchasesRes.status).toBe(200);
+    const preservedPurchase = purchasesRes.body.items.find(
+      (item: any) => item.id === purchaseRes.body.id,
+    );
+    expect(preservedPurchase).toBeDefined();
+    expect(preservedPurchase.buyer).toBeNull();
   });
 });

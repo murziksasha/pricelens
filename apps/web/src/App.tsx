@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { ProgressBar } from './components/ProgressBar';
 import { api } from './lib/api';
 import { usePrefs } from './lib/i18n';
 import { AdminPage } from './pages/AdminPage';
@@ -37,13 +38,44 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (me === undefined) return <p className="muted">{prefs.t('common.loading')}</p>;
+  if (me === undefined) {
+    return (
+      <div style={{ maxWidth: 420, margin: '20vh auto', padding: 16 }}>
+        <ProgressBar />
+      </div>
+    );
+  }
+
+  async function refreshMe(): Promise<Me | null> {
+    try {
+      const user = await api<Me>('/api/auth/me');
+      setMe(user);
+      return user;
+    } catch {
+      setMe(null);
+      return null;
+    }
+  }
 
   return (
     <Routes>
       <Route path="/login" element={<LoginPage onIn={(user) => { setMe(user); prefs.setLocale(user.language); prefs.setTheme(user.theme); navigate('/'); }} />} />
       <Route
-        element={me ? <Layout me={me} onLogout={() => { localStorage.removeItem('pricelens.token'); setMe(null); navigate('/login'); }} /> : <Navigate to="/login" replace />}
+        element={
+          me ? (
+            <Layout
+              me={me}
+              onLogout={() => {
+                localStorage.removeItem('pricelens.token');
+                setMe(null);
+                navigate('/login');
+              }}
+              refreshMe={refreshMe}
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
       >
         <Route path="/" element={<SearchPage />} />
         <Route path="/history" element={<HistoryPage />} />

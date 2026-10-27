@@ -185,6 +185,33 @@ export class UsersController {
     await audit(this.prisma, userOf(req).id, 'user.update', 'user', id, input.password ? { password: true } : input);
     return { id: user.id, login: user.login, role: user.role, isActive: user.isActive };
   }
+
+  @Delete(':id')
+  async delete(@Req() req: Request, @Param('id') id: string) {
+    const caller = userOf(req);
+    if (caller.id === id) throw new HttpException({ error: 'cannot_delete_self' }, 400);
+
+    const target = await this.prisma.user.findUnique({ where: { id } });
+    if (!target) throw new HttpException({ error: 'not_found' }, 404);
+
+    if (target.role === 'admin' && target.isActive) {
+      const others = await this.prisma.user.count({ where: { role: 'admin', isActive: true, NOT: { id } } });
+      if (others === 0) throw new HttpException({ error: 'last_admin' }, 400);
+    }
+
+    await this.prisma.searchTemplate.updateMany({
+      where: { ownerId: id, shared: true },
+      data: { ownerId: caller.id },
+    });
+
+    await this.prisma.listingNote.deleteMany({
+      where: { userId: id, shared: false },
+    });
+
+    await audit(this.prisma, caller.id, 'user.delete', 'user', id, { login: target.login });
+    await this.prisma.user.delete({ where: { id } });
+    return { ok: true };
+  }
 }
 
 @Controller()
@@ -558,7 +585,7 @@ export class PurchaseController {
       soldAt: row.soldAt,
       note: row.note,
       snapshot: row.listingSnapshot,
-      buyer: row.user.login,
+      buyer: row.user ? row.user.login : null,
       userId: row.userId,
       margin: realisedMargin(num(row.price), row.salePrice == null ? null : num(row.salePrice), row.qty),
     }));
@@ -655,9 +682,24 @@ export class TemplateController {
 
   @Post(':id/run')
   async run(@Req() req: Request, @Param('id') id: string) {
-    await this.owned(req, id);
-    const searchId = await runTemplate(this.prisma, id, { load: getLoader() });
-    return { id: searchId };
+    const template = await this.owned(req, id);
+    const search = await this.prisma.search.create({
+      data: {
+        userId: userOf(req).id,
+        query: template.query,
+        filters: template.filters as object,
+        siteIds: template.siteIds,
+        refresh: false,
+        status: process.env.INLINE_SEARCH === '0' ? 'queued' : 'running',
+      },
+    });
+    if (process.env.INLINE_SEARCH === '0') {
+      const { publishSearch } = await import('./queue');
+      await publishSearch(search.id);
+    } else {
+      await runSearch(this.prisma, search.id, { load: getLoader() });
+    }
+    return { id: search.id };
   }
 
   @Put(':id/schedule')
@@ -808,7 +850,7 @@ export class AdminController {
     const sites = await this.prisma.site.findMany({ orderBy: { name: 'asc' } });
     const since = new Date(Date.now() - 7 * 86_400_000);
     const checks = await this.prisma.siteHealth.findMany({ where: { checkedAt: { gte: since } } });
-    return sites.map((site) => {
+    const siteRows = sites.map((site) => {
       const rows = checks.filter((check) => check.siteId === site.id);
       const latest = rows.sort((a, b) => b.checkedAt.getTime() - a.checkedAt.getTime())[0];
       const ok = rows.filter((row) => row.status === 'green').length;
@@ -822,13 +864,59 @@ export class AdminController {
         checkedAt: latest?.checkedAt ?? null,
       };
     });
+    const latestRun = await this.prisma.healthRun.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
+    return {
+      sites: siteRows,
+      run: latestRun
+        ? {
+            id: latestRun.id,
+            status: latestRun.status,
+            total: latestRun.total,
+            done: latestRun.done,
+            startedAt: latestRun.startedAt,
+            finishedAt: latestRun.finishedAt,
+            createdAt: latestRun.createdAt,
+          }
+        : null,
+    };
   }
 
   @Post('health/run')
   async runHealth() {
-    const sites = await this.prisma.site.findMany({ where: { enabled: true } });
-    for (const site of sites) await checkSite(this.prisma, site.id, getLoader());
-    return { ok: true };
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60_000);
+    const inProgress = await this.prisma.healthRun.findFirst({
+      where: {
+        status: { in: ['queued', 'running'] },
+        createdAt: { gte: thirtyMinAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (inProgress) {
+      return {
+        id: inProgress.id,
+        status: inProgress.status,
+        done: inProgress.done,
+        total: inProgress.total,
+      };
+    }
+    const enabledCount = await this.prisma.site.count({ where: { enabled: true } });
+    const run = await this.prisma.healthRun.create({
+      data: {
+        status: 'queued',
+        total: enabledCount,
+        done: 0,
+      },
+    });
+    const { publishHealth } = await import('./queue');
+    await publishHealth(run.id);
+    return {
+      id: run.id,
+      status: run.status,
+      done: run.done,
+      total: run.total,
+    };
   }
 
   @Get('backups')
