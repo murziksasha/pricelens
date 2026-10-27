@@ -291,6 +291,12 @@ export const DEFAULT_SETTINGS = {
   google_api_key: '',
   google_cx: '',
   telegram_bot_token: '',
+  smtp_host: '',
+  smtp_port: 587,
+  smtp_user: '',
+  smtp_password: '',
+  smtp_from: '',
+  email_enabled: false,
   quiet_start: '',
   quiet_end: '',
 } as const;

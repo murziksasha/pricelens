@@ -18,9 +18,7 @@
 - Frontend: React + TypeScript.
 - Desktop: Tauri (thin client).
 - Search: per-site `SiteAdapter` (native search URL/API + parser) is primary; `GoogleFallbackProvider` only for sites without own search (ADR-0001).
-
-
-
+- LAN Discovery: API broadcasts UDP beacons on port `53530` (`pricelens 1 <api-port>`); clients use "Find server" button to probe local/LAN addresses and invoke `discover_server` on desktop.
 
 ## Hosting (ADR-0006)
 - Server host: owner's Windows laptop running Docker Desktop, reachable on the LAN (fixed local IP or hostname).

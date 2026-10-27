@@ -20,6 +20,8 @@ export const userPatchSchema = z.object({
 export const preferencesSchema = z.object({
   language: z.enum(['en', 'ru', 'uk']).optional(),
   theme: z.enum(['light', 'dark', 'system']).optional(),
+  email: z.union([z.string().email(), z.literal(''), z.null()]).optional(),
+  emailOptIn: z.boolean().optional(),
 });
 
 export const searchFiltersSchema = z.object({

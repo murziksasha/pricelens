@@ -16,6 +16,8 @@ export interface Me {
   role: 'admin' | 'user';
   language: 'en' | 'ru' | 'uk';
   theme: 'light' | 'dark' | 'system';
+  email?: string | null;
+  emailOptIn?: boolean;
 }
 
 export function App() {

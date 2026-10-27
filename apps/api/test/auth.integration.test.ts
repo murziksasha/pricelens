@@ -78,6 +78,31 @@ describe.skipIf(!run)('API integration', () => {
     expect(denied.body.error).toBe('forbidden');
     const audit = await request(app.getHttpServer()).get('/api/admin/audit').set('authorization', `Bearer ${token}`);
     expect(audit.body.some((row: { action: string }) => row.action === 'user.create')).toBe(true);
+
+    const patchMe = await request(app.getHttpServer())
+      .patch('/api/auth/me')
+      .set('authorization', `Bearer ${token}`)
+      .send({ email: 'admin@pricelens.lan', emailOptIn: true });
+    expect(patchMe.status).toBe(200);
+    expect(patchMe.body.email).toBe('admin@pricelens.lan');
+    expect(patchMe.body.emailOptIn).toBe(true);
+
+    const getMe = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('authorization', `Bearer ${token}`);
+    expect(getMe.body.email).toBe('admin@pricelens.lan');
+    expect(getMe.body.emailOptIn).toBe(true);
+
+    await request(app.getHttpServer())
+      .put('/api/admin/settings')
+      .set('authorization', `Bearer ${token}`)
+      .send({ smtp_password: 'super-secret-smtp', smtp_host: 'mail.test' });
+    const settingsRes = await request(app.getHttpServer())
+      .get('/api/admin/settings')
+      .set('authorization', `Bearer ${token}`);
+    expect(settingsRes.body.smtp_password).toBe('***');
+    expect(settingsRes.body.smtp_host).toBe('mail.test');
+
     await request(app.getHttpServer())
       .patch(`/api/users/${created.body.id}`)
       .set('authorization', `Bearer ${token}`)

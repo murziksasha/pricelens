@@ -9,7 +9,11 @@ export function Layout({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const { t, locale, setLocale, theme, setTheme } = usePrefs();
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [notes, setNotes] = useState<Array<{ id: string; type: string; payload: { title?: string } }>>([]);
+  const [emailDraft, setEmailDraft] = useState(me.email || '');
+  const [optInDraft, setOptInDraft] = useState(Boolean(me.emailOptIn));
+  const [accountSaved, setAccountSaved] = useState(false);
 
   useEffect(() => {
     api<{ count: number }>('/api/notifications/unread').then((row) => setUnread(row.count)).catch(() => undefined);
@@ -42,6 +46,7 @@ export function Layout({ me, onLogout }: { me: Me; onLogout: () => void }) {
           type="button"
           onClick={async () => {
             setOpen(true);
+            setAccountOpen(false);
             setNotes(await api('/api/notifications'));
           }}
         >
@@ -57,7 +62,16 @@ export function Layout({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <option value="dark">{t('theme.dark')}</option>
           <option value="system">{t('theme.system')}</option>
         </select>
-        <span className="muted">{me.login}</span>
+        <button
+          type="button"
+          data-testid="account-btn"
+          onClick={() => {
+            setAccountOpen(true);
+            setOpen(false);
+          }}
+        >
+          {me.login}
+        </button>
         <button type="button" onClick={onLogout}>{t('nav.logout')}</button>
       </header>
       <Outlet />
@@ -80,6 +94,52 @@ export function Layout({ me, onLogout }: { me: Me; onLogout: () => void }) {
           {notes.map((note) => (
             <p key={note.id}>{note.payload.title || note.type}</p>
           ))}
+        </div>
+      )}
+      {accountOpen && (
+        <div className="drawer" data-testid="account-drawer">
+          <div className="row">
+            <strong>{t('account.title')}</strong>
+            <button type="button" onClick={() => setAccountOpen(false)}>{t('common.close')}</button>
+          </div>
+          <form
+            className="stack"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await api('/api/auth/me', {
+                method: 'PATCH',
+                body: JSON.stringify({ email: emailDraft.trim(), emailOptIn: optInDraft }),
+              });
+              setAccountSaved(true);
+            }}
+          >
+            <label className="field">
+              {t('account.email')}
+              <input
+                data-testid="account-email"
+                type="email"
+                value={emailDraft}
+                onChange={(e) => {
+                  setEmailDraft(e.target.value);
+                  setAccountSaved(false);
+                }}
+              />
+            </label>
+            <label className="row">
+              <input
+                data-testid="account-opt-in"
+                type="checkbox"
+                checked={optInDraft}
+                onChange={(e) => {
+                  setOptInDraft(e.target.checked);
+                  setAccountSaved(false);
+                }}
+              />
+              {t('account.emailOptIn')}
+            </label>
+            <button className="primary" type="submit">{t('account.save')}</button>
+            {accountSaved && <p className="muted">{t('account.saved')}</p>}
+          </form>
         </div>
       )}
     </div>

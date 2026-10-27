@@ -12,6 +12,7 @@ import {
   runDueSchedules,
   runSearch,
   telegramListingMessage,
+  dispatchEmailNotifications,
 } from '@pricelens/pipeline';
 import { capturePage } from './browser';
 
@@ -163,6 +164,7 @@ async function main() {
     await drain();
     await runDueSchedules(prisma, { load: load }).catch((error) => console.error(error));
     await pollTelegram().catch((error) => console.error(error));
+    await dispatchEmailNotifications(prisma).catch((error) => console.error(error));
     await shots().catch((error) => console.error(error));
   };
   if (process.env.HEALTH_AUTORUN === '1') {

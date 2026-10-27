@@ -6,6 +6,10 @@
   "types": "src/index.ts",
   "scripts": {
     "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "prisma db seed",
+    "studio": "prisma studio",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.ts"

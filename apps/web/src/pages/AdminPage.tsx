@@ -164,35 +164,159 @@ function Settings() {
   const { t } = usePrefs();
   const [form, setForm] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
-  useEffect(() => {
+  function load() {
     api<Record<string, unknown>>('/api/admin/settings').then((data) => {
       const next: Record<string, string> = {};
       for (const [key, value] of Object.entries(data)) next[key] = String(value ?? '');
       setForm(next);
     });
-  }, []);
+  }
+  useEffect(load, []);
   return (
-    <form className="stack" onSubmit={async (event) => {
-      event.preventDefault();
-      const body: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(form)) {
-        body[key] = value === '***' || Number.isNaN(Number(value)) || value === '' ? value : Number(value);
-        if (key.includes('key') || key.includes('token') || key.includes('cron') || key.includes('language') || key.includes('currency') || key.includes('quiet')) body[key] = value;
-      }
-      await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
-      setSaved(true);
-    }}>
+    <form
+      className="stack"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const body: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(form)) {
+          body[key] = value === '***' || Number.isNaN(Number(value)) || value === '' ? value : Number(value);
+          if (
+            key.includes('key') ||
+            key.includes('token') ||
+            key.includes('cron') ||
+            key.includes('language') ||
+            key.includes('currency') ||
+            key.includes('quiet') ||
+            key.includes('host') ||
+            key.includes('user') ||
+            key.includes('password') ||
+            key.includes('from')
+          )
+            body[key] = value;
+          if (key === 'email_enabled') body[key] = value === 'true';
+        }
+        await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
+        setSaved(true);
+        load();
+      }}
+    >
       <h1>{t('settings.title')}</h1>
-      <label className="field">{t('settings.dealGreen')}<input value={form.deal_green_threshold || ''} onChange={(event) => setForm({ ...form, deal_green_threshold: event.target.value })} /></label>
-      <label className="field">{t('settings.dealYellow')}<input value={form.deal_yellow_threshold || ''} onChange={(event) => setForm({ ...form, deal_yellow_threshold: event.target.value })} /></label>
-      <label className="field">{t('settings.minMargin')}<input value={form.min_margin_uah || ''} onChange={(event) => setForm({ ...form, min_margin_uah: event.target.value })} /></label>
-      <label className="field">{t('settings.delivery')}<input value={form.cost_delivery || ''} onChange={(event) => setForm({ ...form, cost_delivery: event.target.value })} /></label>
-      <label className="field">{t('settings.repair')}<input value={form.cost_repair || ''} onChange={(event) => setForm({ ...form, cost_repair: event.target.value })} /></label>
-      <label className="field">{t('settings.googleKey')}<input value={form.google_api_key || ''} onChange={(event) => setForm({ ...form, google_api_key: event.target.value })} /></label>
-      <label className="field">{t('settings.telegram')}<input value={form.telegram_bot_token || ''} onChange={(event) => setForm({ ...form, telegram_bot_token: event.target.value })} /></label>
-      <label className="field">{t('settings.backupKeep')}<input value={form.backup_keep || ''} onChange={(event) => setForm({ ...form, backup_keep: event.target.value })} /></label>
-      <label className="field">{t('settings.backupTime')}<input value={form.backup_cron || ''} onChange={(event) => setForm({ ...form, backup_cron: event.target.value })} /></label>
-      <button className="primary" type="submit">{t('common.save')}</button>
+      <label className="field">
+        {t('settings.dealGreen')}
+        <input
+          value={form.deal_green_threshold || ''}
+          onChange={(event) => setForm({ ...form, deal_green_threshold: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.dealYellow')}
+        <input
+          value={form.deal_yellow_threshold || ''}
+          onChange={(event) => setForm({ ...form, deal_yellow_threshold: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.minMargin')}
+        <input
+          value={form.min_margin_uah || ''}
+          onChange={(event) => setForm({ ...form, min_margin_uah: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.delivery')}
+        <input
+          value={form.cost_delivery || ''}
+          onChange={(event) => setForm({ ...form, cost_delivery: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.repair')}
+        <input
+          value={form.cost_repair || ''}
+          onChange={(event) => setForm({ ...form, cost_repair: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.googleKey')}
+        <input
+          value={form.google_api_key || ''}
+          onChange={(event) => setForm({ ...form, google_api_key: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.telegram')}
+        <input
+          value={form.telegram_bot_token || ''}
+          onChange={(event) => setForm({ ...form, telegram_bot_token: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.smtpHost')}
+        <input
+          data-testid="smtp-host"
+          value={form.smtp_host || ''}
+          onChange={(event) => setForm({ ...form, smtp_host: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.smtpPort')}
+        <input
+          data-testid="smtp-port"
+          value={form.smtp_port || ''}
+          onChange={(event) => setForm({ ...form, smtp_port: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.smtpUser')}
+        <input
+          data-testid="smtp-user"
+          value={form.smtp_user || ''}
+          onChange={(event) => setForm({ ...form, smtp_user: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.smtpPassword')}
+        <input
+          data-testid="smtp-password"
+          type="password"
+          value={form.smtp_password || ''}
+          onChange={(event) => setForm({ ...form, smtp_password: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.smtpFrom')}
+        <input
+          data-testid="smtp-from"
+          value={form.smtp_from || ''}
+          onChange={(event) => setForm({ ...form, smtp_from: event.target.value })}
+        />
+      </label>
+      <label className="row">
+        <input
+          data-testid="email-enabled"
+          type="checkbox"
+          checked={form.email_enabled === 'true'}
+          onChange={(event) => setForm({ ...form, email_enabled: String(event.target.checked) })}
+        />
+        {t('settings.emailEnabled')}
+      </label>
+      <label className="field">
+        {t('settings.backupKeep')}
+        <input
+          value={form.backup_keep || ''}
+          onChange={(event) => setForm({ ...form, backup_keep: event.target.value })}
+        />
+      </label>
+      <label className="field">
+        {t('settings.backupTime')}
+        <input
+          value={form.backup_cron || ''}
+          onChange={(event) => setForm({ ...form, backup_cron: event.target.value })}
+        />
+      </label>
+      <button className="primary" type="submit">
+        {t('common.save')}
+      </button>
       {saved && <p>{t('settings.saved')}</p>}
     </form>
   );

@@ -27,6 +27,8 @@ model User {
   isActive     Boolean  @default(true) @map("is_active")
   language     String   @default("en")
   theme        String   @default("system")
+  email        String?
+  emailOptIn   Boolean  @default(false) @map("email_opt_in")
   createdAt    DateTime @default(now()) @map("created_at")
 
   sessions      Session[]

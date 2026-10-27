@@ -15,6 +15,8 @@ export interface AuthUser {
   isActive: boolean;
   language: string;
   theme: string;
+  email: string | null;
+  emailOptIn: boolean;
 }
 
 const fails = new Map<string, { count: number; reset: number }>();
@@ -64,6 +66,8 @@ export class AuthGuard implements CanActivate {
       isActive: session.user.isActive,
       language: session.user.language,
       theme: session.user.theme,
+      email: session.user.email,
+      emailOptIn: session.user.emailOptIn,
     };
     return true;
   }
@@ -115,6 +119,8 @@ export async function openSession(prisma: PrismaService, login: string, password
       role: user.role,
       language: user.language,
       theme: user.theme,
+      email: user.email,
+      emailOptIn: user.emailOptIn,
     },
   };
 }

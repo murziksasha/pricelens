@@ -5,4 +5,5 @@ export * from './specs';
 export * from './schedule';
 export * from './catalog';
 export * from './schemas';
+export * from './discovery';
 export * from './i18n';

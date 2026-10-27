@@ -1,12 +1,49 @@
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build output
 dist/
+build/
+*.tsbuildinfo
+.turbo/
+.cache/
+
+# Secrets (keep .env.example)
 .env
+.env.*
+!.env.example
+
+# Logs
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Tests
 coverage/
 playwright-report/
+blob-report/
+playwright/.cache/
 test-results/
-.turbo/
-apps/web/dist/
-backups/*.gz
-backups/*.dump
-*.tsbuildinfo
+
+# Database dumps and backups (FR-ADM-004)
+backups/
+*.dump
+*.sql.gz
+
+# Tauri / Rust (apps/desktop)
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editors
+.idea/
+*.swp
+*.swo

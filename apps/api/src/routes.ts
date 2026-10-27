@@ -118,8 +118,21 @@ export class AuthController {
   @Patch('me')
   async patchMe(@Req() req: Request, @Body() body: unknown) {
     const input = parse(preferencesSchema, body);
-    const user = await this.prisma.user.update({ where: { id: userOf(req).id }, data: input });
-    return { id: user.id, login: user.login, role: user.role, language: user.language, theme: user.theme };
+    const data: { language?: string; theme?: string; email?: string | null; emailOptIn?: boolean } = {};
+    if (input.language !== undefined) data.language = input.language;
+    if (input.theme !== undefined) data.theme = input.theme;
+    if (input.email !== undefined) data.email = input.email === '' ? null : input.email;
+    if (input.emailOptIn !== undefined) data.emailOptIn = input.emailOptIn;
+    const user = await this.prisma.user.update({ where: { id: userOf(req).id }, data });
+    return {
+      id: user.id,
+      login: user.login,
+      role: user.role,
+      language: user.language,
+      theme: user.theme,
+      email: user.email,
+      emailOptIn: user.emailOptIn,
+    };
   }
 }
 
@@ -762,7 +775,12 @@ export class AdminController {
   async settings() {
     const settings = await readSettings(this.prisma);
     const secret = (value: unknown) => (value ? '***' : '');
-    return { ...settings, google_api_key: secret(settings.google_api_key), telegram_bot_token: secret(settings.telegram_bot_token) };
+    return {
+      ...settings,
+      google_api_key: secret(settings.google_api_key),
+      telegram_bot_token: secret(settings.telegram_bot_token),
+      smtp_password: secret(settings.smtp_password),
+    };
   }
 
   @Put('settings')
@@ -770,7 +788,10 @@ export class AdminController {
     const current = await readSettings(this.prisma);
     for (const [key, value] of Object.entries(body)) {
       if (value === '***') continue;
-      const stored = key === 'google_api_key' || key === 'telegram_bot_token' ? value || current[key] : value;
+      const stored =
+        key === 'google_api_key' || key === 'telegram_bot_token' || key === 'smtp_password'
+          ? value || current[key]
+          : value;
       await this.prisma.setting.upsert({ where: { key }, create: { key, value: stored as object }, update: { value: stored as object } });
     }
     await audit(this.prisma, userOf(req).id, 'settings.update', 'settings');
