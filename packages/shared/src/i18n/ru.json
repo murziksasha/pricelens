@@ -149,7 +149,7 @@
   "groups.merge": "Объединить группы",
   "groups.split": "Отделить",
   "groups.confidence": "Уверенность",
-  "groups.history": "История цены",
+  "groups.history": "История цен",
   "marks.interesting": "Интересно",
   "marks.rejected": "Отклонено",
   "marks.bought": "Куплено",
@@ -337,5 +337,7 @@
   "results.buyBelow": "Покупать ≤ {amount} грн",
   "results.daysListed": "{count} дн. в продаже",
   "results.sellerHint.negotiable": "Продавец может уступить",
-  "results.sellerHint.motivated": "Продавец хочет быстро продать"
+  "results.sellerHint.motivated": "Продавец хочет быстро продать",
+  "groups.historyEmpty": "Пока мало истории цен",
+  "groups.historyRange": "Медиана б/у цены {from} – {to}: {min}–{max} грн, сейчас {last} грн"
 }

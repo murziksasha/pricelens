@@ -3,6 +3,7 @@ export * from './fx';
 export * from './purchases';
 export * from './regroup';
 export * from './drain';
+export * from './price-history';
 export * from './backup-files';
 export * from './backups';
 export * from './sheet';

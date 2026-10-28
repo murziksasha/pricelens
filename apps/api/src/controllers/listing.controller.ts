@@ -7,9 +7,10 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
 } from '@nestjs/common';
-import { audit, mergeGroups, splitListings, attachGroup } from '@pricelens/pipeline';
+import { audit, mergeGroups, splitListings, attachGroup, groupPriceHistory, listingPriceHistory } from '@pricelens/pipeline';
 import {
   groupMergeSchema,
   groupSplitSchema,
@@ -81,6 +82,19 @@ export class ListingController {
   split(@Req() req: Request, @Body() body: unknown) {
     const input = parse(groupSplitSchema, body);
     return splitListings(this.prisma, input.listingIds, input.name, userOf(req).id);
+  }
+
+  @Get('listings/:id/prices')
+  async listingPrices(@Param('id') id: string) {
+    const history = await listingPriceHistory(this.prisma, id);
+    if (!history) throw new HttpException({ error: 'not_found' }, 404);
+    return history;
+  }
+
+  @Get('groups/:id/price-history')
+  async groupHistory(@Param('id') id: string, @Query('days') days?: string) {
+    const span = Math.min(365, Math.max(7, Number(days) || 90));
+    return groupPriceHistory(this.prisma, id, span);
   }
 
   @Get('groups/:id')

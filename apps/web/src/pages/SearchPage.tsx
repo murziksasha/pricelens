@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { usePrefs } from '../lib/i18n';
 import { ProgressBar } from '../components/ProgressBar';
+import { PriceHistory } from '../components/PriceHistory';
 
 interface SiteRow { id: string; name: string; selected: boolean; enabled: boolean }
 interface GroupRow { id: string; name: string; siteIds: string[] }
@@ -285,6 +286,7 @@ export function SearchPage() {
                         {row.newRange && <span className="muted"> {t('groups.rangeNew')} {row.newRange.min}-{row.newRange.max}</span>}
                         {row.usedRange && <span className="muted"> {t('groups.rangeUsed')} {row.usedRange.min}-{row.usedRange.max}</span>}
                         {row.partsRange && <span className="muted"> {t('groups.rangeParts')} {row.partsRange.min}-{row.partsRange.max}</span>}
+                        {absolute === cursor && row.groupId && <PriceHistory groupId={row.groupId} />}
                       </td>
                     )}
                     {cols.includes('price') && (

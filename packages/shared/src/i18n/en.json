@@ -337,5 +337,7 @@
   "results.buyBelow": "Buy ≤ {amount} UAH",
   "results.daysListed": "{count} d listed",
   "results.sellerHint.negotiable": "Seller may negotiate",
-  "results.sellerHint.motivated": "Motivated seller"
+  "results.sellerHint.motivated": "Motivated seller",
+  "groups.historyEmpty": "Not enough price history yet",
+  "groups.historyRange": "Median used price {from} – {to}: {min}–{max} UAH, now {last} UAH"
 }

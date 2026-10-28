@@ -149,7 +149,7 @@
   "groups.merge": "Об'єднати групи",
   "groups.split": "Відділити",
   "groups.confidence": "Впевненість",
-  "groups.history": "Історія ціни",
+  "groups.history": "Історія цін",
   "marks.interesting": "Цікаво",
   "marks.rejected": "Відхилено",
   "marks.bought": "Куплено",
@@ -337,5 +337,7 @@
   "results.buyBelow": "Купувати ≤ {amount} грн",
   "results.daysListed": "{count} дн. в продажу",
   "results.sellerHint.negotiable": "Продавець може поступитися",
-  "results.sellerHint.motivated": "Продавець хоче швидко продати"
+  "results.sellerHint.motivated": "Продавець хоче швидко продати",
+  "groups.historyEmpty": "Поки замало історії цін",
+  "groups.historyRange": "Медіана б/в ціни {from} – {to}: {min}–{max} грн, зараз {last} грн"
 }

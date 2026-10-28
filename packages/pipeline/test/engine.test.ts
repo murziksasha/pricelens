@@ -1,6 +1,6 @@
 import { PrismaClient } from '@pricelens/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { drainQueuedSearches, refreshNbuRates, runSearch, searchProgress, searchRows } from '../src';
+import { drainQueuedSearches, groupPriceHistory, listingPriceHistory, refreshNbuRates, runSearch, searchProgress, searchRows } from '../src';
 import { dbUrl, makeSite, makeUser, migrate, resetDb, runIntegration } from './helpers';
 
 interface Item {
@@ -88,6 +88,31 @@ describe.skipIf(!runIntegration)('search engine (integration)', () => {
     const broken = rows.find((row) => row.url.endsWith('/p1'))!;
     expect(broken.defects).toContain('parts');
     expect(broken.expectedSale).toBeNull();
+  });
+
+  it('builds a daily median price history for a group', async () => {
+    const site = await makeSite(prisma);
+    const title = 'Lenovo ThinkPad X280 i5-8250U 8GB 256GB';
+    const id = await search([site.id], {
+      [site.id]: page([
+        { title, path: '/h1', price: 9000 },
+        { title, path: '/h2', price: 10000 },
+        { title, path: '/h3', price: 11000 },
+      ]),
+    });
+    const rows = await searchRows(prisma, id);
+    const groupId = rows[0]!.groupId!;
+    // Pretend /h1 was first seen 3 days ago at 12 000 and dropped to 9 000 today.
+    const h1 = rows.find((row) => row.url.endsWith('/h1'))!;
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000);
+    await prisma.listing.update({ where: { id: h1.listingId }, data: { firstSeenAt: threeDaysAgo } });
+    await prisma.listingPrice.create({ data: { listingId: h1.listingId, price: 12000, seenAt: threeDaysAgo } });
+
+    const history = await groupPriceHistory(prisma, groupId, 7);
+    expect(history[0]).toMatchObject({ median: 12000, samples: 1 });
+    expect(history[history.length - 1]).toMatchObject({ median: 10000, samples: 3 });
+    const listing = await listingPriceHistory(prisma, h1.listingId);
+    expect(listing!.points.map((point) => point.price)).toEqual([12000, 9000]);
   });
 
   it('marks a re-post on another site at ±3% but not at +20%', async () => {
