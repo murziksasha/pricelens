@@ -1,0 +1,10 @@
+import { extractListings, listingsFromAnchors } from '../src';
+import * as cheerio from 'cheerio';
+import fs from 'fs';
+const html = fs.readFileSync('/tmp/olx-rendered.html', 'utf8');
+const items = extractListings(html, { baseUrl: 'https://www.olx.ua/' });
+console.log('extract', items.length, JSON.stringify(items.slice(0, 2)).slice(0, 500));
+const $ = cheerio.load(html);
+console.log('anchors', listingsFromAnchors($, { baseUrl: 'https://www.olx.ua/' }).length);
+const card = $('[data-cy="l-card"]').first();
+console.log(card.html()?.slice(0, 2500));

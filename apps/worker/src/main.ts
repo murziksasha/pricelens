@@ -246,6 +246,9 @@ async function main() {
   const loaded = (await import('pg-boss')) as unknown as { default: new (url: string) => any };
   const PgBoss = loaded.default;
   const queue = new PgBoss(process.env.DATABASE_URL || '');
+  // Without a listener, a dropped DB connection (e.g. postgres restarting) is an unhandled 'error'
+  // event that kills the worker. pg-boss reconnects by itself, so just log it.
+  queue.on('error', (error: Error) => console.error('pgboss_error', error.message));
   await queue.start();
   await queue.createQueue('search').catch(() => undefined);
   await queue.createQueue('health').catch(() => undefined);
@@ -271,7 +274,7 @@ async function main() {
     tick().catch((error) => console.error(error));
   }, 15_000);
   await tick();
-  console.log('worker started');
+  console.log(`worker started (h2 fetch, ${process.env.INLINE_SEARCH === '1' ? 'inline' : 'queue'} mode)`);
 }
 
 if (require.main === module) {

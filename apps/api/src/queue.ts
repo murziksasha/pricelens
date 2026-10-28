@@ -10,6 +10,7 @@ async function boss() {
       const loaded = (await import('pg-boss')) as unknown as { default: new (url: string) => any };
       const PgBoss = loaded.default;
       const queue = new PgBoss(process.env.DATABASE_URL || '');
+      queue.on('error', (error: Error) => console.error('pgboss_error', error.message));
       await queue.start();
       await queue.createQueue('search').catch(() => undefined);
       await queue.createQueue('health').catch(() => undefined);
