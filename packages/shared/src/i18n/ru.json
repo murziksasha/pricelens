@@ -325,5 +325,12 @@
   "settings.useAllocated": "Учитывать распределённые цены из смешанных лотов",
   "search.failed": "Поиск не удался.",
   "search.retry": "Повторить",
-  "constructor.blockedUrl": "Просматривать можно только публичные http(s) сайты; локальные и внутренние адреса заблокированы."
+  "constructor.blockedUrl": "Просматривать можно только публичные http(s) сайты; локальные и внутренние адреса заблокированы.",
+  "groups.rangeParts": "Диапазон «на запчасти» / с дефектами",
+  "results.defect.parts": "На запчасти",
+  "results.defect.not_working": "Не работает",
+  "results.defect.broken": "Повреждён",
+  "results.defect.missing_part": "Не хватает детали",
+  "results.defect.locked": "Заблокирован / пароль",
+  "results.defect.liquid": "После залития"
 }

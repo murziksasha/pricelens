@@ -325,5 +325,12 @@
   "settings.useAllocated": "Враховувати розподілені ціни зі змішаних лотів",
   "search.failed": "Пошук не вдався.",
   "search.retry": "Повторити",
-  "constructor.blockedUrl": "Переглядати можна лише публічні http(s) сайти; локальні та внутрішні адреси заблоковано."
+  "constructor.blockedUrl": "Переглядати можна лише публічні http(s) сайти; локальні та внутрішні адреси заблоковано.",
+  "groups.rangeParts": "Діапазон «на запчастини» / з дефектами",
+  "results.defect.parts": "На запчастини",
+  "results.defect.not_working": "Не працює",
+  "results.defect.broken": "Пошкоджений",
+  "results.defect.missing_part": "Бракує деталі",
+  "results.defect.locked": "Заблоковано / пароль",
+  "results.defect.liquid": "Після залиття"
 }

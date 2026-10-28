@@ -28,6 +28,8 @@ interface ResultRow {
   groupId: string | null;
   newRange: { min: number; max: number } | null;
   usedRange: { min: number; max: number } | null;
+  defects: string[];
+  partsRange: { min: number; max: number } | null;
   bought: { count: number; lastPrice: number; lastAt: string } | null;
   priceHint: number | null;
   specs: Record<string, string | number | null> | null;
@@ -264,12 +266,14 @@ export function SearchPage() {
                         {row.imageUrl && <img className="thumb" alt="" src={row.imageUrl} />} {row.title}
                         {row.visited && <span className="badge">{t('results.openedBy', { user: row.visited.login || t('users.deletedAccount'), date: row.visited.visitedAt.slice(0, 10) })}</span>}
                         {row.duplicateOf && <span className="badge">{t('results.duplicate')}</span>}
+                        {row.defects?.map((tag) => <span key={tag} className="badge bad">{t(`results.defect.${tag}`)}</span>)}
                         {row.priceDropped && <span className="badge warn">{t('results.priceDrop')}</span>}
                         {row.bought && <span className="badge">{t('purchase.badge', { count: row.bought.count, price: row.bought.lastPrice, date: row.bought.lastAt.slice(0, 10) })}</span>}
                         {row.priceHint != null && row.priceHint > 0 && <span className="badge deal">{t('purchase.cheaper', { amount: Math.round(row.priceHint) })}</span>}
                         {row.groupName && <span className="muted"> {row.groupName}</span>}
                         {row.newRange && <span className="muted"> {t('groups.rangeNew')} {row.newRange.min}-{row.newRange.max}</span>}
                         {row.usedRange && <span className="muted"> {t('groups.rangeUsed')} {row.usedRange.min}-{row.usedRange.max}</span>}
+                        {row.partsRange && <span className="muted"> {t('groups.rangeParts')} {row.partsRange.min}-{row.partsRange.max}</span>}
                       </td>
                     )}
                     {cols.includes('price') && (

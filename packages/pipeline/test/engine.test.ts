@@ -63,6 +63,29 @@ describe.skipIf(!runIntegration)('search engine (integration)', () => {
     expect((await searchProgress(prisma, id)).done).toBe(true);
   });
 
+  it('keeps "for parts" listings out of the working median and prices them separately', async () => {
+    const site = await makeSite(prisma);
+    const title = 'Dell Latitude 7490 i5-8350U 16GB 256GB';
+    const id = await search([site.id], {
+      [site.id]: page([
+        { title, path: '/w1', price: 14000 },
+        { title, path: '/w2', price: 15000 },
+        { title, path: '/w3', price: 16000 },
+        { title, path: '/w4', price: 17000 },
+        { title: `${title} на запчасти`, path: '/p1', price: 4000 },
+        { title: `${title} не включается`, path: '/p2', price: 5000 },
+      ]),
+    });
+    const rows = await searchRows(prisma, id);
+    const working = rows.find((row) => row.url.endsWith('/w1'))!;
+    expect(working.defects).toEqual([]);
+    expect(working.deal.median).toBe(16000);
+    expect(working.partsRange).toEqual({ min: 4000, max: 5000 });
+    const broken = rows.find((row) => row.url.endsWith('/p1'))!;
+    expect(broken.defects).toContain('parts');
+    expect(broken.expectedSale).toBeNull();
+  });
+
   it('marks a re-post on another site at ±3% but not at +20%', async () => {
     const first = await makeSite(prisma);
     const second = await makeSite(prisma);

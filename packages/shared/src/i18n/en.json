@@ -325,5 +325,12 @@
   "settings.useAllocated": "Use split prices from mixed lots",
   "search.failed": "The search failed.",
   "search.retry": "Retry",
-  "constructor.blockedUrl": "Only public http(s) sites can be previewed; local and internal addresses are blocked."
+  "constructor.blockedUrl": "Only public http(s) sites can be previewed; local and internal addresses are blocked.",
+  "groups.rangeParts": "For parts / defective range",
+  "results.defect.parts": "For parts",
+  "results.defect.not_working": "Not working",
+  "results.defect.broken": "Damaged",
+  "results.defect.missing_part": "Missing part",
+  "results.defect.locked": "Locked / password",
+  "results.defect.liquid": "Liquid damage"
 }

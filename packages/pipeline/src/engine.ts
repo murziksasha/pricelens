@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { applyFilters, extractListings, googleSiteSearch, type ListingDraft } from '@pricelens/adapters';
 import type { PrismaClient } from '@pricelens/db';
 import {
+  detectDefects,
   DEFAULT_MIN_MARGIN_UAH,
   DEFAULT_SETTINGS,
   buildSearchUrl,
@@ -451,15 +452,23 @@ export async function searchRows(prisma: Db, searchId: string) {
     const listing = row.listing;
     const product = listing.grouped?.product ?? null;
     const groupMembers = product ? members.filter((member) => member.productId === product.id) : [];
-    // Comparable used units only: not this listing, not a repost, recently seen.
-    const used = groupMembers
-      .filter(
-        (member) =>
-          member.listingId !== listing.id &&
-          !member.listing.dupOf &&
-          member.listing.condition === 'used' &&
-          member.listing.lastSeenAt >= since,
-      )
+    // 5.1: defective / "for parts" units are priced separately from working ones.
+    const defects = detectDefects(listing.title, listing.description);
+    const comparable = groupMembers.filter(
+      (member) =>
+        member.listingId !== listing.id &&
+        !member.listing.dupOf &&
+        member.listing.condition === 'used' &&
+        member.listing.lastSeenAt >= since,
+    );
+    const isDefective = (member: (typeof comparable)[number]) => detectDefects(member.listing.title, member.listing.description).length > 0;
+    // Comparable used units only: not this listing, not a repost, recently seen, working.
+    const used = comparable
+      .filter((member) => !isDefective(member))
+      .map((member) => uah(member.listing))
+      .filter((value): value is number => value != null);
+    const parts = comparable
+      .filter(isDefective)
       .map((member) => uah(member.listing))
       .filter((value): value is number => value != null);
     const fresh = groupMembers
@@ -470,20 +479,23 @@ export async function searchRows(prisma: Db, searchId: string) {
     const deal =
       listingUah == null
         ? ({ score: null, label: 'insufficient', median: null, samples: used.length } as const)
-        : dealScore(listingUah, used, { green, yellow });
+        : dealScore(listingUah, defects.length ? parts : used, { green, yellow });
     const points = product
       ? soldItems
           .filter((item) => item.productGroupId === product.id)
           .map((item) => ({ value: num(item.saleUnitUah), weight: item.qty }))
       : [];
-    const sale = expectedSalePrice({
-      manual: product?.expectedSalePrice != null ? num(product.expectedSalePrice) : null,
-      ownMedian: weightedMedian(points),
-      unitsSold: points.reduce((sum, point) => sum + point.weight, 0),
-      askingMedian: deal.median,
-      askingToSaleRatio,
-      minOwnSales,
-    });
+    // A defective unit has no reliable resale price from working-unit data.
+    const sale = defects.length
+      ? { value: null, source: 'none' as const, samples: 0 }
+      : expectedSalePrice({
+          manual: product?.expectedSalePrice != null ? num(product.expectedSalePrice) : null,
+          ownMedian: weightedMedian(points),
+          unitsSold: points.reduce((sum, point) => sum + point.weight, 0),
+          askingMedian: deal.median,
+          askingToSaleRatio,
+          minOwnSales,
+        });
     const expected = sale.value;
     const profit =
       expected != null && listingUah != null
@@ -524,6 +536,8 @@ export async function searchRows(prisma: Db, searchId: string) {
       groupConfidence: product?.confidence ?? null,
       newRange: range(fresh),
       usedRange: range(used),
+      defects,
+      partsRange: range(parts),
       bought: last
         ? {
             count: history.reduce((sum, item) => sum + item.qty, 0),
