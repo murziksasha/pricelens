@@ -15,6 +15,12 @@ export interface CatalogSite {
   supportedFilters: SiteFilter[];
   unsupportedFilters: string[];
   defaultCondition: 'new' | 'used' | 'unknown';
+  /**
+   * Earlier built-in values of this site's search URL (and domain). A stored site still holding
+   * one of them was never customised, so startup sync may move it to the current one.
+   */
+  legacyTemplates?: string[];
+  legacyDomains?: string[];
 }
 
 /** FR-SITE-010 built-in catalogue. Native search URLs; Google is not the default (ADR-0001). */
@@ -35,6 +41,7 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: ['price_min', 'price_max', 'page'],
     unsupportedFilters: ['condition', 'city'],
     defaultCondition: 'used',
+    legacyTemplates: ['https://www.olx.ua/uk/list/q-{query}/', 'https://www.olx.ua/list/q-{query}/'],
   },
   {
     key: 'prom',
@@ -88,17 +95,18 @@ export const SITE_CATALOG: CatalogSite[] = [
     key: 'rozetka',
     name: 'Rozetka',
     domain: 'rozetka.com.ua',
-    urlTemplate: 'https://rozetka.com.ua/ua/search/?text={query}&price={price_min}-{price_max}',
+    urlTemplate: 'https://search.rozetka.com.ua/ua/search/api/v6/?front-type=xl&country=UA&lang=ua&redirected=1&text={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
     pollIntervalMinutes: 15,
     maxConcurrency: 2,
     minDelayMs: 700,
-    useBrowser: true,
-    supportedFilters: ['price_min', 'price_max'],
-    unsupportedFilters: ['condition', 'city'],
+    useBrowser: false,
+    supportedFilters: [],
+    unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://rozetka.com.ua/ua/search/?text={query}&price={price_min}-{price_max}'],
   },
   {
     key: 'ek',
@@ -120,7 +128,7 @@ export const SITE_CATALOG: CatalogSite[] = [
     key: 'kvshop',
     name: 'KVShop',
     domain: 'kvshop.com.ua',
-    urlTemplate: 'https://kvshop.com.ua/index.php?route=product/search&search={query}',
+    urlTemplate: 'https://kvshop.com.ua/search/?q={query}',
     regions: ['ua', 'odesa'],
     groups: ['Shops'],
     mode: 'native',
@@ -131,12 +139,13 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://kvshop.com.ua/index.php?route=product/search&search={query}'],
   },
   {
     key: 'itbox',
     name: 'itbox',
     domain: 'www.itbox.ua',
-    urlTemplate: 'https://www.itbox.ua/ua/search/?q={query}',
+    urlTemplate: 'https://www.itbox.ua/ua/search/?Search={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
@@ -147,12 +156,13 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://www.itbox.ua/ua/search/?q={query}'],
   },
   {
     key: 'click',
     name: 'Click.ua',
     domain: 'click.ua',
-    urlTemplate: 'https://click.ua/search/?query={query}',
+    urlTemplate: 'https://click.ua/shop/search?q={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
@@ -163,12 +173,13 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://click.ua/search/?query={query}'],
   },
   {
     key: 'brain',
     name: 'Brain',
     domain: 'brain.com.ua',
-    urlTemplate: 'https://brain.com.ua/ukr/search/?q={query}',
+    urlTemplate: 'https://brain.com.ua/ukr/search/?Search={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
@@ -179,12 +190,13 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://brain.com.ua/ukr/search/?q={query}'],
   },
   {
     key: 'touch',
     name: 'Touch',
     domain: 'touch.com.ua',
-    urlTemplate: 'https://touch.com.ua/search/?search={query}',
+    urlTemplate: 'https://touch.com.ua/ua/search/?q={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
@@ -195,12 +207,13 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://touch.com.ua/search/?search={query}'],
   },
   {
     key: 'skay',
     name: 'Skay',
     domain: 'skay.ua',
-    urlTemplate: 'https://skay.ua/ua/search/?q={query}',
+    urlTemplate: 'https://skay.ua/module/ambjolisearch/jolisearch?search_query={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
@@ -211,6 +224,7 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://skay.ua/ua/search/?q={query}'],
   },
   {
     key: 'pcshop',
@@ -230,9 +244,9 @@ export const SITE_CATALOG: CatalogSite[] = [
   },
   {
     key: 'fua',
-    name: 'F.ua',
-    domain: 'f.ua',
-    urlTemplate: 'https://f.ua/search/?query={query}',
+    name: 'Epicentr (ex F.ua)',
+    domain: 'epicentrk.ua',
+    urlTemplate: 'https://epicentrk.ua/search/?q={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
@@ -243,12 +257,14 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://f.ua/search/?query={query}'],
+    legacyDomains: ['f.ua'],
   },
   {
     key: 'proton',
     name: 'Proton-IT',
     domain: 'proton-it.kyiv.ua',
-    urlTemplate: 'https://proton-it.kyiv.ua/index.php?route=product/search&search={query}',
+    urlTemplate: 'https://proton-it.kyiv.ua/catalog/search/?q={query}',
     regions: ['ua', 'kyiv'],
     groups: ['Shops'],
     mode: 'native',
@@ -259,12 +275,13 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://proton-it.kyiv.ua/index.php?route=product/search&search={query}'],
   },
   {
     key: 'tex',
     name: 'Tex.ua',
     domain: 'tex.ua',
-    urlTemplate: 'https://tex.ua/search/?query={query}',
+    urlTemplate: 'https://tex.ua/t/tovary?search%5Bwith_name_or_sku%5D={query}',
     regions: ['ua'],
     groups: ['Shops'],
     mode: 'native',
@@ -275,6 +292,7 @@ export const SITE_CATALOG: CatalogSite[] = [
     supportedFilters: [],
     unsupportedFilters: ['price_min', 'price_max', 'condition', 'city'],
     defaultCondition: 'new',
+    legacyTemplates: ['https://tex.ua/search/?query={query}'],
   },
 ];
 
