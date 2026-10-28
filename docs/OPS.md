@@ -33,3 +33,44 @@ pnpm --filter @pricelens/web dev
 ## Desktop
 
 The Windows client is a Tauri shell in `apps/desktop`. Install Rust, then run `apps/desktop/build.ps1`. On the login screen set the server to `http://<lan-ip>:3000` and use Test connection.
+
+## Backups
+
+- Automatic backups run on the `backup_cron` schedule (default daily) and whenever the last automatic
+  backup is older than 24 hours. Only pg_dump custom-format files (`.dump`) are accepted for upload.
+- Restoring takes a `safety-*.dump` backup first. The 3 newest safety backups are kept separately and
+  never push regular backups out of rotation; the backup being restored is never deleted.
+- `pg_dump`/`pg_restore` must be on the API/worker PATH (the Docker images include them).
+
+## Upgrading to purchase positions (migration `20261028110000_purchase_items`)
+
+1. Take a backup (Admin → Backups → Create) and download it.
+2. Check old purchases where `sale_price` may have meant "per unit" instead of "whole purchase":
+
+   ```sql
+   SELECT id, qty, price, sale_price FROM purchases WHERE qty > 1 AND sale_price IS NOT NULL;
+   ```
+
+   From now on `sale_price` is the total for the whole purchase. Fix any row that stored a per-unit
+   price (`UPDATE purchases SET sale_price = sale_price * qty WHERE id = '…'`) **before** migrating.
+3. Run `pnpm --filter @pricelens/db migrate:deploy` (or restart the stack; the API applies migrations).
+
+## Prices in hryvnia
+
+After the `exchange_rates` migration, fill `price_uah` for old listings and purchases:
+
+```bash
+pnpm --filter @pricelens/pipeline backfill:fx
+```
+
+The worker refreshes NBU rates every 6 hours (`FX_AUTORUN=0` disables it); manual rates and the
+spread are set in Admin → Settings.
+
+## Re-grouping listings
+
+Grouping is stricter now (same model and specs prefix). Preview first, then apply:
+
+```bash
+pnpm --filter @pricelens/pipeline regroup           # dry run, prints the changes
+pnpm --filter @pricelens/pipeline regroup --apply   # take a backup first
+```
