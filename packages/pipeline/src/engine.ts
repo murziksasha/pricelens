@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { applyFilters, extractListings, googleSiteSearch, looksBlockedPage, type ListingDraft } from '@pricelens/adapters';
+import {
+  applyFilters,
+  expandSearchPage,
+  extractListings,
+  googleSiteSearch,
+  looksBlockedPage,
+  type ListingDraft,
+} from '@pricelens/adapters';
 import type { PrismaClient } from '@pricelens/db';
 import {
   detectDefects,
@@ -252,7 +259,11 @@ async function upsertDraft(
   return { listing, changed: Boolean(existing && changed), isNew: !existing };
 }
 
-export async function runSearch(prisma: Db, searchId: string, deps: { load: LoadPage; now?: Date }) {
+export async function runSearch(
+  prisma: Db,
+  searchId: string,
+  deps: { load: LoadPage; now?: Date; fetchImpl?: (url: string, init?: RequestInit) => Promise<Response> },
+) {
   const search = await prisma.search.findUnique({ where: { id: searchId } });
   if (!search) throw new Error('search_not_found');
   const filters = (search.filters ?? {}) as SearchFilters;
@@ -315,7 +326,7 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
             price_max: site.supportedFilters.includes('price_max') ? filters.priceMax ?? null : null,
             city: site.supportedFilters.includes('city') ? filters.city ?? null : null,
           });
-          const html = await deps.load(site, url);
+          const html = await expandSearchPage(url, await deps.load(site, url), { fetchImpl: deps.fetchImpl });
           drafts = extractListings(html, { baseUrl: `https://${site.domain}/` });
           // A block page is an error, not "no listings" (and must not be cached as an empty result).
           if (drafts.length === 0 && looksBlockedPage(html)) throw new Error('upstream_blocked');
@@ -584,7 +595,7 @@ export async function checkSite(prisma: Db, siteId: string, load: LoadPage) {
   let error: string | null = null;
   try {
     const url = buildSearchUrl(site.urlTemplate, { query: 'ноутбук', page: 1 });
-    const html = await load(site, url);
+    const html = await expandSearchPage(url, await load(site, url));
     const items = extractListings(html, { baseUrl: `https://${site.domain}/` });
     status = items.length >= 1 ? 'green' : 'yellow';
     if (status !== 'green') error = 'no_results';

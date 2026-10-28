@@ -81,6 +81,8 @@ export function createH2Fetch(options: H2FetchOptions = {}): typeof fetch {
         const stream = session.request({
           ':method': init?.method ?? 'GET',
           ':path': `${url.pathname}${url.search}`,
+          // Node's default :authority carries ":443"; some nginx fronts (search.rozetka.com.ua) answer 400.
+          ':authority': url.host,
           'accept-encoding': 'gzip, deflate, br',
           ...headerRecord(init),
         });

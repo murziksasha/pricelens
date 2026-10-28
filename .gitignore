@@ -47,3 +47,6 @@ Desktop.ini
 .idea/
 *.swp
 *.swo
+
+# scratch scripts
+packages/*/tmp/
