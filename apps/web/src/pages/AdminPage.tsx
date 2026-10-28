@@ -890,7 +890,7 @@ function Backups() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".dump,.sql,.sql.gz"
+          accept=".dump"
           style={{ display: 'none' }}
           onChange={handleFile}
         />

@@ -139,20 +139,29 @@ async function shots() {
   }
 }
 
+let backupRunning = false;
+
+/**
+ * FR-ADM-004 scheduled backup. Called on every tick: runs when the cron matches or the last auto
+ * backup is older than 24h (laptop was off), but never twice within an hour.
+ */
 async function maybeBackup() {
-  if (process.env.BACKUP_AUTORUN === '0') return;
+  if (process.env.BACKUP_AUTORUN === '0' || backupRunning) return;
   const settings = await readSettings(prisma);
   const dir = process.env.BACKUP_DIR || './backups';
   const files = await listBackups(dir);
   const newest = files.find((file) => file.kind === 'auto');
   const cron = String(settings.backup_cron || '0 3 * * *');
-  const missed = !newest || Date.now() - newest.mtimeMs > 24 * 3600_000;
-  if (missed || cronMatches(cron, new Date())) {
-    try {
-      await createBackup(dir, process.env.DATABASE_URL || '', 'auto', Number(settings.backup_keep ?? 10));
-    } catch (error) {
-      await notifyAdmins(prisma, 'backup_failed', { error: error instanceof Error ? error.message : 'backup_failed' });
-    }
+  const age = newest ? Date.now() - newest.mtimeMs : Infinity;
+  if (age < 60 * 60_000) return;
+  if (age <= 24 * 3600_000 && !cronMatches(cron, new Date())) return;
+  backupRunning = true;
+  try {
+    await createBackup(dir, process.env.DATABASE_URL || '', 'auto', Number(settings.backup_keep ?? 10));
+  } catch (error) {
+    await notifyAdmins(prisma, 'backup_failed', { error: error instanceof Error ? error.message : 'backup_failed' });
+  } finally {
+    backupRunning = false;
   }
 }
 
@@ -256,6 +265,7 @@ async function main() {
     await dispatchEmailNotifications(prisma).catch((error) => console.error(error));
     await shots().catch((error) => console.error(error));
     await maybeRefreshFx().catch((error) => console.error('fx_refresh_failed', error));
+    await maybeBackup().catch((error) => console.error(error));
   };
   await maybeBackup().catch((error) => console.error(error));
   setInterval(() => {

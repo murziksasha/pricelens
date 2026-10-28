@@ -5,7 +5,11 @@ export interface BackupFile {
   kind: 'auto' | 'manual' | 'safety';
 }
 
-const NAME = /^pricelens-[\w.-]+-(auto|manual|safety)\.(dump|sql|sql\.gz)$/;
+/** Only pg_dump custom-format files (-Fc) are created and restorable (pg_restore). */
+const NAME = /^pricelens-[\w.-]+-(auto|manual|safety)\.dump$/;
+
+/** Safety backups (taken before a restore) are kept separately from the rotation. */
+export const SAFETY_KEEP = 3;
 
 export function backupFileName(kind: 'auto' | 'manual' | 'safety', now = new Date()): string {
   const stamp = now.toISOString().replace(/[:.]/g, '-');
@@ -17,10 +21,15 @@ export function parseBackupName(name: string): BackupFile['kind'] | null {
   return (match?.[1] as BackupFile['kind']) ?? null;
 }
 
-/** FR-ADM-004 keep the N most recent backups. */
-export function backupsToDelete(files: BackupFile[], keep: number): string[] {
-  const sorted = [...files].sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return sorted.slice(Math.max(0, keep)).map((file) => file.name);
+/**
+ * FR-ADM-004 keep the N most recent auto/manual backups plus the SAFETY_KEEP newest safety backups.
+ * Names in `protect` (e.g. the backup being restored) are never deleted.
+ */
+export function backupsToDelete(files: BackupFile[], keep: number, protect: string[] = []): string[] {
+  const newestFirst = (a: BackupFile, b: BackupFile) => b.mtimeMs - a.mtimeMs;
+  const rotating = files.filter((file) => file.kind !== 'safety' && !protect.includes(file.name)).sort(newestFirst);
+  const safeties = files.filter((file) => file.kind === 'safety' && !protect.includes(file.name)).sort(newestFirst);
+  return [...rotating.slice(Math.max(0, keep)), ...safeties.slice(SAFETY_KEEP)].map((file) => file.name);
 }
 
 export function assertSafeBackupName(name: string): void {
@@ -29,10 +38,7 @@ export function assertSafeBackupName(name: string): void {
   }
 }
 
+/** Accepts pg_dump custom format only ("PGDMP" magic). Plain SQL / gzip cannot be restored with pg_restore. */
 export function isBackupPayload(buf: Buffer): boolean {
-  if (buf.length < 5) return false;
-  if (buf.subarray(0, 5).toString('utf8') === 'PGDMP') return true;
-  if (buf[0] === 0x1f && buf[1] === 0x8b) return true;
-  const head = buf.subarray(0, 80).toString('utf8');
-  return head.startsWith('--') || head.startsWith('SET ') || head.startsWith('PGDMP');
+  return buf.length >= 5 && buf.subarray(0, 5).toString('utf8') === 'PGDMP';
 }
