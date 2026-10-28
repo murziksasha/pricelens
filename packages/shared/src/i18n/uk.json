@@ -332,5 +332,6 @@
   "results.defect.broken": "Пошкоджений",
   "results.defect.missing_part": "Бракує деталі",
   "results.defect.locked": "Заблоковано / пароль",
-  "results.defect.liquid": "Після залиття"
+  "results.defect.liquid": "Після залиття",
+  "purchase.daysToSell": "(продано за {count} дн.)"
 }

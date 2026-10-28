@@ -332,5 +332,6 @@
   "results.defect.broken": "Damaged",
   "results.defect.missing_part": "Missing part",
   "results.defect.locked": "Locked / password",
-  "results.defect.liquid": "Liquid damage"
+  "results.defect.liquid": "Liquid damage",
+  "purchase.daysToSell": "({count} d to sell)"
 }

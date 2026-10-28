@@ -222,7 +222,17 @@ export function PurchasesPage() {
                 <td>{row.margin ?? ''}</td>
                 <td>{row.buyer || t('users.deletedAccount')}</td>
                 <td>{row.purchasedAt.slice(0, 10)}</td>
-                <td>{row.soldAt ? row.soldAt.slice(0, 10) : ''}</td>
+                <td>
+                  {row.soldAt ? row.soldAt.slice(0, 10) : ''}
+                  {row.soldAt && (
+                    <span className="muted">
+                      {' '}
+                      {t('purchase.daysToSell', {
+                        count: Math.max(0, Math.round((Date.parse(row.soldAt) - Date.parse(row.purchasedAt)) / 86_400_000)),
+                      })}
+                    </span>
+                  )}
+                </td>
                 <td>
                   <button type="button" onClick={() => setSelling(selling === row.id ? null : row.id)}>
                     {t('purchase.markSold')}

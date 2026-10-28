@@ -332,5 +332,6 @@
   "results.defect.broken": "Повреждён",
   "results.defect.missing_part": "Не хватает детали",
   "results.defect.locked": "Заблокирован / пароль",
-  "results.defect.liquid": "После залития"
+  "results.defect.liquid": "После залития",
+  "purchase.daysToSell": "(продано за {count} дн.)"
 }
