@@ -6,7 +6,7 @@ export async function seed(prisma: PrismaClient, env: NodeJS.ProcessEnv = proces
   const login = env.ADMIN_LOGIN || 'admin';
   const password = env.ADMIN_PASSWORD || 'changeme';
   if (env.NODE_ENV === 'production' && password === 'changeme') {
-    throw new Error('refusing default admin password in production');
+    throw new Error('refusing default admin password in production: set ADMIN_PASSWORD in .env to a strong password');
   }
   const passwordHash = await hashPassword(password);
   await prisma.user.upsert({

@@ -23,7 +23,7 @@ services:
     environment:
       DATABASE_URL: postgresql://pricelens:pricelens@postgres:5432/pricelens
       ADMIN_LOGIN: admin
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (copy .env.example to .env)}
       PORT: 3000
       INLINE_SEARCH: "0"
       LAN_ONLY: "true"
