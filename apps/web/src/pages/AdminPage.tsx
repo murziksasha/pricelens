@@ -306,6 +306,8 @@ function Constructor() {
   const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api<any[]>('/api/sites').then((list) => {
@@ -381,7 +383,7 @@ function Constructor() {
         />
       </label>
       <label className="field">
-        {t('constructor.detect')}
+        {t('constructor.probe')}
         <input
           value={token}
           onChange={(event) => setToken(event.target.value)}
@@ -390,32 +392,43 @@ function Constructor() {
       <button
         type="button"
         onClick={async () => {
-          const res = await api<{ param: string | null }>('/api/admin/constructor/detect', {
-            method: 'POST',
-            body: JSON.stringify({ url, token }),
-          });
-          const found = res.param || '';
-          setParam(found);
-          if (found && token && url.includes(token)) {
-            setUrl(url.replaceAll(token, '{query}'));
+          setError(null);
+          setNotice(null);
+          try {
+            const res = await api<{ param: string | null; template: string }>('/api/admin/constructor/detect', {
+              method: 'POST',
+              body: JSON.stringify({ url, token }),
+            });
+            const found = res.param || '';
+            setParam(found);
+            if (res.template) setUrl(res.template);
+            setNotice(found ? (found === 'path' ? t('constructor.detectedPath') : `${t('constructor.detectedParam')} ${found}`) : t('constructor.detectMiss'));
+          } catch (err) {
+            setError(err instanceof ApiError ? t('errors.validation') : t('constructor.detectMiss'));
           }
         }}
       >
         {t('constructor.detect')}
       </button>
-      {param && <p>{param}</p>}
+      {notice && <p>{notice}</p>}
+      {error && <p className="error">{error}</p>}
       <textarea value={html} onChange={(event) => setHtml(event.target.value)} rows={6} />
       <button
         type="button"
         disabled={previewing}
         onClick={async () => {
           setPreviewing(true);
+          setError(null);
           try {
-            const preview = await api<{ items: typeof items }>('/api/admin/constructor/preview', {
+            const preview = await api<{ items: typeof items; error?: string | null }>('/api/admin/constructor/preview', {
               method: 'POST',
-              body: JSON.stringify({ url, html }),
+              body: JSON.stringify({ url, html, token }),
             });
             setItems(preview.items);
+            if (preview.error === 'upstream_blocked' || preview.error === 'site_paused') setError(t('constructor.blocked'));
+            else if (preview.items.length === 0) setError(t('constructor.previewEmpty'));
+          } catch (err) {
+            setError(err instanceof ApiError && (err.code === 'site_paused' || err.code === 'upstream_blocked') ? t('constructor.blocked') : t('constructor.previewEmpty'));
           } finally {
             setPreviewing(false);
           }
@@ -451,6 +464,7 @@ function Constructor() {
           setSaving(true);
           setSaved(false);
           const finalUrl = computeUrl();
+          setError(null);
           try {
             if (selectedSiteId && loadedSite) {
               await api(`/api/sites/${selectedSiteId}`, {
@@ -477,6 +491,9 @@ function Constructor() {
               });
               setSaved(true);
             }
+          } catch (err) {
+            setSaved(false);
+            setError(t('errors.validation'));
           } finally {
             setSaving(false);
           }

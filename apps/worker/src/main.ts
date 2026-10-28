@@ -14,7 +14,7 @@ import {
   telegramListingMessage,
   dispatchEmailNotifications,
 } from '@pricelens/pipeline';
-import { capturePage } from './browser';
+import { capturePage, readRenderedHtml } from './browser';
 
 const prisma = new PrismaClient();
 const layer = new RequestLayer({
@@ -27,7 +27,18 @@ const layer = new RequestLayer({
   },
 });
 
-async function load(site: { id: string; maxConcurrency: number; minDelayMs: number; pausedUntil: Date | null }, url: string) {
+async function load(
+  site: { id: string; maxConcurrency: number; minDelayMs: number; pausedUntil: Date | null; useBrowser?: boolean },
+  url: string,
+) {
+  if (site.useBrowser) {
+    try {
+      const rendered = await readRenderedHtml(url);
+      if (rendered) return rendered;
+    } catch (error) {
+      console.error('browser_load_failed', error instanceof Error ? error.message : error);
+    }
+  }
   const result = await layer.getText(
     {
       id: site.id,

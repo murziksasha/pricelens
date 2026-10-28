@@ -65,13 +65,13 @@ Built-in adapters/presets shipped in v1: OLX (olx.ua), Prom.ua, Bigl.ua, Hotline
 - FR-TPL-004 Templates are personal by default; an admin can publish a template as shared.
 
 ## Site constructor (FR-CON) — visual, no-code
-- FR-CON-001 Admin opens a "New site" wizard: name, domain, search URL (the wizard detects the query parameter by running a test search, e.g. the user searches "test123" on the site and pastes the result URL).
+- FR-CON-001 Admin opens a "New site" wizard: name, domain, search URL (the wizard detects the query parameter by running a test search, e.g. the user searches "test123" on the site and pastes the result URL). The probe word may sit in a query parameter or in the path (OLX uses `/q-<word>/`). Percent-encoding is decoded before the match, and the matched word is stored as `{query}`. Preview fetches the address with the probe word filled in, not the literal `{query}` placeholder.
 - FR-CON-002 Built-in browser view of the results page. The web client previews HTML fetched by the server and assigns a clicked value to a field. The worker can also capture a Playwright screenshot plus element boxes for the same URL. Each assignment is stored as a ranked strategy, not a single CSS selector.
 - FR-CON-003 Pagination: user clicks "next page" or the wizard detects the page parameter.
 - FR-CON-004 Live preview: extracted results table shown immediately; user confirms or corrects.
 - FR-CON-005 Optional detail-page mapping (specs table, seller, condition) using the same click method.
 - FR-CON-006 **Resilient selectors** (must not break when classes, tags, or ids are renamed). For every field the system stores several strategies and ranks them:
-  1. Structured data first: JSON-LD / schema.org Product/Offer, OpenGraph, microdata, site API JSON.
+  1. Structured data first: JSON-LD / schema.org Product/Offer, OpenGraph, microdata, site API JSON, and embedded listing JSON (`__PRERENDERED_STATE__`, `__NEXT_DATA__`).
   2. Semantic anchors: visible label text near the value (e.g. "Ціна", "₴"), ARIA roles/attributes, data-* attributes.
   3. Content patterns: regex/value type (price = number + currency, URL = href to item page).
   4. Relative structure: position within the repeated result card (detected as repeating sibling block), not absolute paths.

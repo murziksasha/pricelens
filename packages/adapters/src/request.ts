@@ -33,7 +33,7 @@ const UA =
 
 function isBlocked(status: number, text: string): boolean {
   if (status === 429 || status === 503) return true;
-  if (status === 403 && /captcha|cloudflare|access denied/i.test(text)) return true;
+  if (status === 403 && /captcha|cloudflare|cloudfront|access denied|request blocked/i.test(text)) return true;
   if (/g-recaptcha|hcaptcha|cf-challenge|cf-browser-verification/i.test(text)) return true;
   return false;
 }

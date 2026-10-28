@@ -37,6 +37,50 @@ describe('extraction engine ADR-0002', () => {
     expect(items[0]?.price).toBeGreaterThan(0);
   });
 
+  it('reads OLX listings from prerendered state when the card DOM is empty', () => {
+    const state = {
+      listing: {
+        listing: {
+          ads: [
+            {
+              id: 11,
+              title: 'Ноутбук Lenovo ThinkPad',
+              url: '/d/uk/obyavlenie/laptop-ID11.html',
+              price: { regularPrice: { value: 15000, currencyCode: 'UAH' } },
+              location: { cityName: 'Київ' },
+              photos: [{ link: 'https://img.olx.ua/a.jpg' }],
+            },
+            {
+              id: 12,
+              title: 'Ноутбук Dell',
+              url: '/d/uk/obyavlenie/laptop-ID12.html',
+              price: { displayValue: '12 500 грн.' },
+              location: { cityName: 'Львів' },
+            },
+          ],
+        },
+      },
+    };
+    const encoded = JSON.stringify(JSON.stringify(state));
+    const html = `<html><body><script>window.__PRERENDERED_STATE__ = ${encoded};</script></body></html>`;
+    const items = extractListings(html, { baseUrl: 'https://www.olx.ua/' });
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ title: 'Ноутбук Lenovo ThinkPad', price: 15000, currency: 'UAH', location: 'Київ' });
+    expect(items[0]?.url).toBe('https://www.olx.ua/d/uk/obyavlenie/laptop-ID11.html');
+    expect(items[1]?.price).toBe(12500);
+  });
+
+  it('reads OLX cards by data-cy when there is no JSON-LD', () => {
+    const card = (title: string, price: string, id: string) =>
+      `<div data-cy="l-card"><a href="/d/uk/obyavlenie/${id}.html"><div data-cy="ad-card-title"><h4>${title}</h4></div><p data-testid="ad-price">${price}</p><p data-testid="location-date">Київ - Сьогодні о 12:00</p></a></div>`;
+    const html = `<div data-testid="listing-grid">${card('Ноутбук 1', '10 000 грн.', 'a')}${card('Ноутбук 2', '11 000 грн.', 'b')}${card('Ноутбук 3', '12 000 грн.', 'c')}</div>`;
+    const items = extractListings(html, { baseUrl: 'https://www.olx.ua/' });
+    expect(items.length).toBeGreaterThanOrEqual(3);
+    expect(items[0]?.title).toContain('Ноутбук');
+    expect(items[0]?.price).toBe(10000);
+    expect(items[0]?.url).toContain('https://www.olx.ua/d/uk/obyavlenie/');
+  });
+
   it('applies a price range on the client', () => {
     const items = [
       { price: 100, condition: 'used' },

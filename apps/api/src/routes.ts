@@ -8,6 +8,8 @@ import {
   createBackup,
   deleteBackup,
   detectQueryParam,
+  expandSearchTemplate,
+  templateFromResultsUrl,
   healFromHtml,
   listBackups,
   mergeGroups,
@@ -972,15 +974,32 @@ export class AdminController {
 
   @Post('constructor/detect')
   detect(@Body() body: { url: string; token: string }) {
-    return { param: detectQueryParam(body.url, body.token || 'test123') };
+    const token = body.token || 'test123';
+    const found = templateFromResultsUrl(body.url || '', token);
+    return { param: found.param ?? detectQueryParam(body.url || '', token), template: found.template };
   }
 
   @Post('constructor/preview')
-  async preview(@Body() body: { url?: string; html?: string }) {
+  async preview(@Body() body: { url?: string; html?: string; token?: string }) {
+    const token = body.token || 'test123';
+    const pageUrl = body.url ? expandSearchTemplate(body.url, token) : '';
     let html = body.html ?? '';
-    if (!html && body.url) html = await getLoader()({ id: 'preview', key: 'preview', maxConcurrency: 1, minDelayMs: 0, pausedUntil: null }, body.url);
-    const base = body.url || 'https://preview.local/';
-    return { html, items: previewListings(html, base) };
+    if (!html && pageUrl) {
+      try {
+        html = await getLoader()({ id: 'preview', key: 'preview', maxConcurrency: 1, minDelayMs: 0, pausedUntil: null }, pageUrl);
+      } catch (error) {
+        const code = error instanceof Error ? error.message : 'upstream_error';
+        return { html: '', items: [], url: pageUrl, error: code };
+      }
+    }
+    const blocked =
+      html.length > 0 &&
+      /cloudfront|cf-browser-verification|cf-challenge|g-recaptcha|request blocked/i.test(html) &&
+      !html.includes('data-cy="l-card"') &&
+      !html.includes('__PRERENDERED_STATE__');
+    const base = pageUrl || body.url || 'https://preview.local/';
+    const items = previewListings(html, base);
+    return { html, items, url: pageUrl, error: blocked && items.length === 0 ? 'upstream_blocked' : null };
   }
 
   @Post('constructor/assign')

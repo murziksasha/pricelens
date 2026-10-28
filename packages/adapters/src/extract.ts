@@ -206,17 +206,163 @@ function draftFromCard($: cheerio.CheerioAPI, card: any, options: ExtractOptions
   };
 }
 
+function priceFromAd(price: unknown): { amount: number | null; currency: string | null; raw: string | null } {
+  if (typeof price === 'number') return { amount: price, currency: null, raw: String(price) };
+  if (typeof price === 'string') {
+    const money = parseMoney(price);
+    return { amount: money?.amount ?? null, currency: money?.currency ?? null, raw: price };
+  }
+  if (!price || typeof price !== 'object') return { amount: null, currency: null, raw: null };
+  const obj = price as Record<string, unknown>;
+  const regular = obj.regularPrice;
+  if (regular && typeof regular === 'object') {
+    const record = regular as Record<string, unknown>;
+    const amount = Number(record.value);
+    return {
+      amount: Number.isFinite(amount) ? amount : null,
+      currency: record.currencyCode ? String(record.currencyCode) : null,
+      raw: record.value == null ? null : String(record.value),
+    };
+  }
+  const display = String(obj.displayValue ?? obj.label ?? obj.value ?? '');
+  const money = parseMoney(display);
+  return { amount: money?.amount ?? null, currency: money?.currency ?? (obj.currency ? String(obj.currency) : null), raw: display || null };
+}
+
+function locationFromAd(item: Record<string, unknown>): string | null {
+  const loc = item.location ?? item.city;
+  if (typeof loc === 'string') return loc;
+  if (!loc || typeof loc !== 'object') return null;
+  const record = loc as Record<string, unknown>;
+  const city = record.cityName ?? record.city ?? record.name ?? record.pathName;
+  return typeof city === 'string' ? city : null;
+}
+
+function imageFromAd(item: Record<string, unknown>): string | null {
+  const photos = item.photos ?? item.images;
+  const first = Array.isArray(photos) ? photos[0] : null;
+  if (typeof first === 'string') return first;
+  if (!first || typeof first !== 'object') return null;
+  const photo = first as Record<string, unknown>;
+  const link = photo.link ?? photo.url ?? photo.src;
+  return typeof link === 'string' ? link.replace('{width}', '800').replace('{height}', '600') : null;
+}
+
+function draftFromAd(item: Record<string, unknown>, baseUrl: string): ListingDraft | null {
+  const title = String(item.title ?? '').replace(/\s+/g, ' ').trim();
+  const href = typeof item.url === 'string' ? item.url : '';
+  const url = absUrl(baseUrl, href);
+  const money = priceFromAd(item.price);
+  if (!title || !url || money.amount == null) return null;
+  const rawDate = item.lastRefreshTime ?? item.createdTime ?? item.created_at;
+  let postedAt: string | null = null;
+  if (typeof rawDate === 'string') {
+    const parsed = Date.parse(rawDate);
+    postedAt = Number.isNaN(parsed) ? (parsePostedAt(rawDate)?.toISOString() ?? null) : new Date(parsed).toISOString();
+  }
+  return {
+    title,
+    price: money.amount,
+    currency: money.currency,
+    url,
+    imageUrl: imageFromAd(item),
+    location: locationFromAd(item),
+    postedAt,
+    description: typeof item.description === 'string' ? item.description : null,
+    externalId: item.id == null ? null : String(item.id),
+    condition: 'unknown',
+    rawPrice: money.raw,
+  };
+}
+
+function collectAdArrays(node: unknown, into: Record<string, unknown>[], depth = 0) {
+  if (!node || typeof node !== 'object' || depth > 8) return;
+  if (Array.isArray(node)) {
+    const ads = node.filter((item): item is Record<string, unknown> => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      const record = item as Record<string, unknown>;
+      return typeof record.title === 'string' && record.price != null && (typeof record.url === 'string' || record.id != null);
+    });
+    if (ads.length >= 1 && ads.length * 2 >= node.length) {
+      into.push(...ads);
+      return;
+    }
+    for (const item of node) collectAdArrays(item, into, depth + 1);
+    return;
+  }
+  for (const value of Object.values(node as Record<string, unknown>)) collectAdArrays(value, into, depth + 1);
+}
+
+/** FR-CON-006: OLX (and similar shells) keep the list in prerendered JSON, not in the card DOM. */
+export function listingsFromEmbeddedState(html: string, baseUrl: string): ListingDraft[] {
+  const blobs: unknown[] = [];
+  const match = html.match(/__PRERENDERED_STATE__\s*=\s*"((?:[^"\\]|\\.)*)"/);
+  if (match?.[1]) {
+    try {
+      const decoded = JSON.parse(`"${match[1]}"`) as unknown;
+      blobs.push(typeof decoded === 'string' ? JSON.parse(decoded) : decoded);
+    } catch {
+      /* ignore a broken state blob */
+    }
+  }
+  const $ = cheerio.load(html);
+  $('script#__NEXT_DATA__').each((_, el) => {
+    try {
+      blobs.push(JSON.parse($(el).text()));
+    } catch {
+      /* ignore */
+    }
+  });
+  const ads: Record<string, unknown>[] = [];
+  for (const blob of blobs) collectAdArrays(blob, ads);
+  return ads.map((ad) => draftFromAd(ad, baseUrl)).filter((item): item is ListingDraft => Boolean(item));
+}
+
+/** FR-CON-006 semantic anchors used by OLX cards (`data-cy="l-card"`). */
+export function listingsFromAnchors($: cheerio.CheerioAPI, options: ExtractOptions): ListingDraft[] {
+  const drafts: ListingDraft[] = [];
+  $('[data-cy="l-card"]').each((_, card) => {
+    const node = $(card);
+    const href = node.find('a[href]').first().attr('href');
+    const url = absUrl(options.baseUrl, href);
+    const title = (node.find('[data-cy="ad-card-title"]').text() || node.find('h1, h2, h3, h4, h5, h6').first().text())
+      .replace(/\s+/g, ' ')
+      .trim();
+    const priceText = node.find('[data-testid="ad-price"]').text().replace(/\s+/g, ' ').trim();
+    const money = parseMoney(priceText);
+    if (!title || !url || money?.amount == null) return;
+    const locationText = node.find('[data-testid="location-date"]').text().replace(/\s+/g, ' ').trim();
+    const posted = parsePostedAt(locationText);
+    const image = node.find('img').attr('src') || node.find('img').attr('data-src');
+    drafts.push({
+      title,
+      price: money.amount,
+      currency: money.currency ?? options.currencyHint ?? null,
+      url,
+      imageUrl: image ? absUrl(options.baseUrl, image) : null,
+      location: locationText || null,
+      postedAt: posted ? posted.toISOString() : null,
+      description: null,
+      externalId: node.attr('id') ?? null,
+      condition: conditionFrom(node.text()),
+      rawPrice: priceText,
+    });
+  });
+  return drafts;
+}
+
 export function extractListings(html: string, options: ExtractOptions): ListingDraft[] {
   const fromLd = listingsFromJsonLd(html, options.baseUrl).filter((item) => item.title && item.url && item.price != null);
   if (fromLd.length >= 1 && !options.css) return dedupe(fromLd);
+  const fromState = listingsFromEmbeddedState(html, options.baseUrl);
   const $ = cheerio.load(html);
+  const fromAnchors = listingsFromAnchors($, options);
   const cards = findCards($);
   const fromCards = cards
     .map((card) => draftFromCard($, card, options))
     .filter((item): item is ListingDraft => Boolean(item && item.price != null));
-  if (fromCards.length > fromLd.length) return dedupe(fromCards);
-  if (fromLd.length > 0) return dedupe(fromLd);
-  return dedupe(fromCards);
+  const ranked = [fromState, fromAnchors, fromCards, fromLd].sort((left, right) => right.length - left.length);
+  return dedupe(ranked[0] ?? []);
 }
 
 function dedupe(items: ListingDraft[]): ListingDraft[] {
