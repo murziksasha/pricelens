@@ -278,7 +278,7 @@ function Sites() {
           <strong>{row.name}</strong>
           <span>{row.domain}</span>
           <NavLink to={`/admin/constructor?site=${row.id}`}>{t('sites.editConstructor')}</NavLink>
-          <button type="button" onClick={async () => { await api(`/api/sites/${row.id}`, { method: 'PATCH', body: JSON.stringify({ ...row, enabled: !row.enabled }) }); load(); }}>{row.enabled ? t('common.enabled') : t('common.no')}</button>
+          <button type="button" onClick={async () => { await api(`/api/sites/${row.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: !row.enabled }) }); load(); }}>{row.enabled ? t('common.enabled') : t('common.no')}</button>
           <button type="button" onClick={() => api(`/api/sites/${row.id}/export`)}>{t('sites.export')}</button>
           <button type="button" onClick={async () => { if (confirm(t('sites.deleteConfirm'))) { await api(`/api/sites/${row.id}`, { method: 'DELETE' }); load(); } }}>{t('common.delete')}</button>
         </article>

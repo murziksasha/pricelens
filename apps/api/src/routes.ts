@@ -47,6 +47,11 @@ import {
   scheduleSchema,
   searchCreateSchema,
   siteWriteSchema,
+  sitePatchSchema,
+  siteGroupSchema,
+  rollbackSchema,
+  groupPatchSchema,
+  listingSpecsSchema,
   templateSchema,
   userCreateSchema,
   userPatchSchema,
@@ -305,7 +310,7 @@ export class CatalogController {
   @Patch('sites/:id')
   @UseGuards(AdminGuard)
   async patch(@Req() req: Request, @Param('id') id: string, @Body() body: unknown) {
-    const input = parse(siteWriteSchema, body);
+    const input = parse(sitePatchSchema, body);
     const site = await this.prisma.site.update({
       where: { id },
       data: {
@@ -328,7 +333,8 @@ export class CatalogController {
       },
     });
     await this.prisma.siteConfigVersion.create({
-      data: { siteId: id, version: site.currentVersion, config: input as object, createdBy: userOf(req).id },
+      // Store the full resulting config (not just the patch) so a rollback restores everything.
+      data: { siteId: id, version: site.currentVersion, config: JSON.parse(JSON.stringify(site)), createdBy: userOf(req).id },
     });
     await audit(this.prisma, userOf(req).id, 'site.update', 'site', id);
     return site;
@@ -375,27 +381,28 @@ export class CatalogController {
 
   @Post('sites/:id/rollback')
   @UseGuards(AdminGuard)
-  async rollback(@Req() req: Request, @Param('id') id: string, @Body() body: { version: number }) {
+  async rollback(@Req() req: Request, @Param('id') id: string, @Body() body: unknown) {
+    const input = parse(rollbackSchema, body);
     const version = await this.prisma.siteConfigVersion.findUnique({
-      where: { siteId_version: { siteId: id, version: Number(body.version) } },
+      where: { siteId_version: { siteId: id, version: input.version } },
     });
     if (!version) throw new HttpException({ error: 'not_found' }, 404);
-    const config = version.config as Record<string, unknown>;
+    // Old versions may hold only the patched fields; restore whatever valid fields they contain.
+    const restored = sitePatchSchema.safeParse(version.config);
+    if (!restored.success) throw new HttpException({ error: 'validation_error' }, 400);
+    const config = restored.data;
     const site = await this.prisma.site.update({
       where: { id },
       data: {
-        name: String(config.name ?? ''),
-        domain: String(config.domain ?? ''),
-        mode: String(config.mode ?? 'native'),
-        urlTemplate: String(config.urlTemplate ?? ''),
-        parseRules: (config.parseRules as object) ?? {},
+        ...config,
+        parseRules: config.parseRules as object | undefined,
         currentVersion: { increment: 1 },
       },
     });
     await this.prisma.siteConfigVersion.create({
-      data: { siteId: id, version: site.currentVersion, config: JSON.parse(JSON.stringify(config)), createdBy: userOf(req).id },
+      data: { siteId: id, version: site.currentVersion, config: JSON.parse(JSON.stringify(site)), createdBy: userOf(req).id },
     });
-    await audit(this.prisma, userOf(req).id, 'site.rollback', 'site', id, { version: body.version });
+    await audit(this.prisma, userOf(req).id, 'site.rollback', 'site', id, { version: input.version });
     return site;
   }
 
@@ -406,18 +413,24 @@ export class CatalogController {
 
   @Post('site-groups')
   @UseGuards(AdminGuard)
-  async createGroup(@Body() body: { name: string; siteIds?: string[] }) {
-    if (!body.name) throw new HttpException({ error: 'validation_error' }, 400);
+  async createGroup(@Body() body: unknown) {
+    const input = parse(siteGroupSchema, body);
     return this.prisma.siteGroup.create({
       data: {
-        name: body.name,
-        members: { create: (body.siteIds ?? []).map((siteId) => ({ siteId })) },
+        name: input.name,
+        members: { create: [...new Set(input.siteIds)].map((siteId) => ({ siteId })) },
       },
       include: { members: true },
     });
   }
 }
 
+/**
+ * Searches are shared with the whole team on purpose (decided 2026-10-28, see
+ * docs/05-security-and-roles.md "Data visibility"): any signed-in, active user may open, stream and
+ * export any search by id. This is not an IDOR; do not add an owner check. History stays per user
+ * unless `?scope=team` is passed.
+ */
 @Controller('searches')
 export class SearchController {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
@@ -447,9 +460,10 @@ export class SearchController {
   }
 
   @Get()
-  history(@Req() req: Request) {
+  history(@Req() req: Request, @Query('scope') scope?: string) {
     return this.prisma.search.findMany({
-      where: { userId: userOf(req).id },
+      where: scope === 'team' ? {} : { userId: userOf(req).id },
+      include: { user: { select: { login: true } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
@@ -544,8 +558,12 @@ export class ListingController {
   }
 
   @Patch('listings/:id/specs')
-  async specs(@Param('id') id: string, @Body() body: { specs: object }) {
-    await this.prisma.listing.update({ where: { id }, data: { specs: body.specs } });
+  async specs(@Param('id') id: string, @Body() body: unknown) {
+    const input = parse(listingSpecsSchema, body);
+    const listing = await this.prisma.listing.findUnique({ where: { id }, select: { specs: true } });
+    if (!listing) throw new HttpException({ error: 'not_found' }, 404);
+    const specs = { ...((listing.specs as object | null) ?? {}), ...input.specs };
+    await this.prisma.listing.update({ where: { id }, data: { specs } });
     await attachGroup(this.prisma, id);
     return { ok: true };
   }
@@ -576,17 +594,22 @@ export class ListingController {
   }
 
   @Patch('groups/:id')
-  async patchGroup(@Param('id') id: string, @Body() body: { expectedSalePrice?: number; minMargin?: number; specs?: object; normalizedName?: string }) {
-    return this.prisma.product.update({
+  async patchGroup(@Req() req: Request, @Param('id') id: string, @Body() body: unknown) {
+    const input = parse(groupPatchSchema, body);
+    const product = await this.prisma.product.findUnique({ where: { id }, select: { specs: true } });
+    if (!product) throw new HttpException({ error: 'not_found' }, 404);
+    const updated = await this.prisma.product.update({
       where: { id },
       data: {
-        expectedSalePrice: body.expectedSalePrice,
-        minMargin: body.minMargin,
-        specs: body.specs,
-        normalizedName: body.normalizedName,
+        expectedSalePrice: input.expectedSalePrice,
+        minMargin: input.minMargin,
+        specs: input.specs ? { ...((product.specs as object | null) ?? {}), ...input.specs } : undefined,
+        normalizedName: input.normalizedName,
         manual: true,
       },
     });
+    await audit(this.prisma, userOf(req).id, 'group.patch', 'product', id, input);
+    return updated;
   }
 }
 

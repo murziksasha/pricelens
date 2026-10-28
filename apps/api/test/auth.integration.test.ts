@@ -187,6 +187,60 @@ describe.skipIf(!run)('API integration', () => {
     resetLoginLimits();
   });
 
+  it('rejects invalid bodies and rolls back complete site configs', async () => {
+    resetLoginLimits();
+    const server = app.getHttpServer();
+    const admin = await request(server).post('/api/auth/login').send({ login: 'admin', password: 'test-password-123' });
+    const auth = { authorization: `Bearer ${admin.body.token}` };
+    const olx = await prisma.site.findFirstOrThrow({ where: { key: 'olx' } });
+
+    expect((await request(server).post('/api/site-groups').set(auth).send({ siteIds: ['nope'] })).status).toBe(400);
+    expect((await request(server).post('/api/site-groups').set(auth).send({ name: 'Main', siteIds: [olx.id] })).status).toBe(201);
+    expect((await request(server).post(`/api/sites/${olx.id}/rollback`).set(auth).send({ version: 'x' })).status).toBe(400);
+
+    const missingGroup = '00000000-0000-4000-8000-000000000000';
+    expect((await request(server).patch(`/api/groups/${missingGroup}`).set(auth).send({ minMargin: -5 })).status).toBe(400);
+    expect((await request(server).patch(`/api/groups/${missingGroup}`).set(auth).send({ evil: true })).status).toBe(400);
+    expect((await request(server).patch(`/api/groups/${missingGroup}`).set(auth).send({ minMargin: 500 })).status).toBe(404);
+
+    const before = await prisma.site.findUniqueOrThrow({ where: { id: olx.id } });
+    const partial = await request(server).patch(`/api/sites/${olx.id}`).set(auth).send({ priority: 7 });
+    expect(partial.status).toBe(200);
+    expect(partial.body.name).toBe(before.name);
+    const version = await prisma.siteConfigVersion.findFirstOrThrow({ where: { siteId: olx.id, version: partial.body.currentVersion } });
+    expect((version.config as { domain?: string }).domain).toBe(before.domain);
+    await request(server).patch(`/api/sites/${olx.id}`).set(auth).send({ priority: 9, minDelayMs: 5000 });
+    const rolled = await request(server).post(`/api/sites/${olx.id}/rollback`).set(auth).send({ version: partial.body.currentVersion });
+    expect(rolled.status).toBe(201);
+    expect(rolled.body.priority).toBe(7);
+    expect(rolled.body.minDelayMs).toBe(before.minDelayMs);
+  });
+
+  it('shares searches with the team but not with anonymous or inactive users', async () => {
+    resetLoginLimits();
+    const server = app.getHttpServer();
+    const admin = await request(server).post('/api/auth/login').send({ login: 'admin', password: 'test-password-123' });
+    const auth = { authorization: `Bearer ${admin.body.token}` };
+    await request(server).post('/api/users').set(auth).send({ login: 'teammate', password: 'teammate-pass-1', role: 'user' });
+    const teammate = await request(server).post('/api/auth/login').send({ login: 'teammate', password: 'teammate-pass-1' });
+    const mate = { authorization: `Bearer ${teammate.body.token}` };
+    const olx = await prisma.site.findFirstOrThrow({ where: { key: 'olx' } });
+    const created = await request(server).post('/api/searches').set(auth).send({ query: 'team', siteIds: [olx.id], filters: {} });
+
+    expect((await request(server).get(`/api/searches/${created.body.id}`).set(mate)).status).toBe(200);
+    expect((await request(server).get(`/api/searches/${created.body.id}/export.csv`).set(mate)).status).toBe(200);
+    expect((await request(server).get(`/api/searches/${created.body.id}`)).status).toBe(401);
+    const own = await request(server).get('/api/searches').set(mate);
+    expect(own.body.some((row: { id: string }) => row.id === created.body.id)).toBe(false);
+    const team = await request(server).get('/api/searches?scope=team').set(mate);
+    const shared = team.body.find((row: { id: string }) => row.id === created.body.id);
+    expect(shared.user).toEqual({ login: 'admin' });
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { login: 'teammate' } });
+    await request(server).patch(`/api/users/${user.id}`).set(auth).send({ isActive: false });
+    expect((await request(server).get(`/api/searches/${created.body.id}`).set(mate)).status).toBe(403);
+  });
+
   it('hides a private note from the other user and keeps a manual merge', async () => {
     const admin = await request(app.getHttpServer()).post('/api/auth/login').send({ login: 'admin', password: 'test-password-123' });
     await request(app.getHttpServer())

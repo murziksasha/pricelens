@@ -147,6 +147,40 @@ export const scheduleSchema = z.object({
   }),
 });
 
+/** PATCH body for a site: every field optional; `key` cannot be changed. */
+export const sitePatchSchema = siteWriteSchema.omit({ key: true }).partial();
+
+export const specsPatchSchema = z
+  .object({
+    brand: z.string().max(40).nullable(),
+    model: z.string().max(80).nullable(),
+    cpu: z.string().max(60).nullable(),
+    ramGb: z.number().int().positive().max(256).nullable(),
+    storageGb: z.number().int().positive().max(16384).nullable(),
+    gpu: z.string().max(60).nullable(),
+    screenIn: z.number().positive().max(25).nullable(),
+  })
+  .partial()
+  .strict();
+
+export const groupPatchSchema = z
+  .object({
+    expectedSalePrice: z.number().nonnegative().max(10_000_000).nullable().optional(),
+    minMargin: z.number().nonnegative().max(10_000_000).nullable().optional(),
+    specs: specsPatchSchema.optional(),
+    normalizedName: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+
+export const listingSpecsSchema = z.object({ specs: specsPatchSchema });
+
+export const siteGroupSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  siteIds: z.array(z.string().uuid()).max(100).default([]),
+});
+
+export const rollbackSchema = z.object({ version: z.coerce.number().int().positive() });
+
 export const groupMergeSchema = z.object({
   targetId: z.string().uuid(),
   sourceId: z.string().uuid(),
