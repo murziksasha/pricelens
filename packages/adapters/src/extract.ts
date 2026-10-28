@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import { parsePostedAt } from './dates';
-import { parseMoney } from './money';
+import { parseMoney, parseMoneyInText } from './money';
+import { siteRulesFor, type SiteRules } from './site-rules';
 
 export interface ListingDraft {
   title: string;
@@ -167,6 +168,12 @@ function conditionFrom(text: string): 'new' | 'used' | 'unknown' {
   return 'unknown';
 }
 
+/** Card text with a space between elements, so "Win11</span><b>7 999 ₴" does not read as "Win117 999 ₴". */
+function textWithGaps(node: cheerio.Cheerio<any>): string {
+  const html = node.html() ?? '';
+  return cheerio.load(html.replace(/>\s*</g, '> <'), null, false).text();
+}
+
 function draftFromCard($: cheerio.CheerioAPI, card: any, options: ExtractOptions): ListingDraft | null {
   const node = $(card);
   const link = options.css?.url
@@ -180,8 +187,8 @@ function draftFromCard($: cheerio.CheerioAPI, card: any, options: ExtractOptions
   const priceText =
     (options.css?.price ? node.find(options.css.price).first().text() : '') ||
     valueByLabel($, node, PRICE_LABELS) ||
-    node.text();
-  const money = parseMoney(priceText);
+    textWithGaps(node);
+  const money = parseMoneyInText(priceText);
   const image = options.css?.image
     ? node.find(options.css.image).attr('src')
     : node.find('img').attr('src');
@@ -351,9 +358,81 @@ export function listingsFromAnchors($: cheerio.CheerioAPI, options: ExtractOptio
   return drafts;
 }
 
+const IMAGE_ATTRS = ['src', 'data-src', 'data-observe-src', 'data-lazy-src', 'data-original'];
+
+function imageFrom(node: cheerio.Cheerio<any>): string | undefined {
+  for (const attr of IMAGE_ATTRS) {
+    const value = node.attr(attr);
+    if (value && !value.startsWith('data:')) return value;
+  }
+  return undefined;
+}
+
+const ENTITIES: Record<string, string> = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ', '#39': "'" };
+
+/** Titles sometimes arrive HTML-escaped twice (JSON-LD inside escaped markup). */
+export function decodeEntities(text: string): string {
+  return text.replace(/&(amp|quot|apos|lt|gt|nbsp|#39);/g, (_, name: string) => ENTITIES[name] ?? _);
+}
+
+/** Cards found with a shop's own selectors (see site-rules.ts). */
+export function listingsFromSiteRules(
+  $: cheerio.CheerioAPI,
+  rules: SiteRules,
+  options: ExtractOptions,
+): ListingDraft[] {
+  const drafts: ListingDraft[] = [];
+  $(rules.card).each((_, card) => {
+    const node = $(card);
+    const titleNode = node.find(rules.title).first();
+    const title = decodeEntities(titleNode.text().replace(/\s+/g, ' ').trim() || titleNode.attr('title') || '');
+    const href = (rules.url ? node.find(rules.url).first() : titleNode).attr('href');
+    const url = absUrl(options.baseUrl, href);
+    const priceNode = node.find(rules.price).first();
+    const rawPrice = ((rules.priceAttr ? priceNode.attr(rules.priceAttr) : undefined) ?? priceNode.text())
+      .replace(/\s+/g, ' ')
+      .trim();
+    const money = parseMoney(rawPrice);
+    if (!title || !url || money?.amount == null || money.amount <= 0) return;
+    const image = imageFrom(node.find(rules.image ?? 'img').first());
+    drafts.push({
+      title,
+      price: money.amount,
+      currency: money.currency ?? rules.currency ?? options.currencyHint ?? null,
+      url,
+      imageUrl: image ? absUrl(options.baseUrl, image) : null,
+      location: null,
+      postedAt: null,
+      description: null,
+      externalId: null,
+      condition: conditionFrom(title),
+      rawPrice: rawPrice.slice(0, 80),
+    });
+  });
+  return drafts;
+}
+
+/** Results prepared by a site loader (e.g. the Rozetka search API, see site-loaders.ts). */
+function listingsFromPrepared(html: string): ListingDraft[] | null {
+  if (!html.startsWith('{"pricelensListings"')) return null;
+  try {
+    const parsed = JSON.parse(html) as { pricelensListings?: ListingDraft[] };
+    return Array.isArray(parsed.pricelensListings) ? parsed.pricelensListings : null;
+  } catch {
+    return null;
+  }
+}
+
 export function extractListings(html: string, options: ExtractOptions): ListingDraft[] {
+  const prepared = listingsFromPrepared(html);
+  if (prepared) return dedupe(prepared);
+  const rules = options.css ? null : siteRulesFor(options.baseUrl);
+  if (rules) {
+    const fromRules = listingsFromSiteRules(cheerio.load(html), rules, options);
+    if (fromRules.length > 0) return dedupe(fromRules);
+  }
   const fromLd = listingsFromJsonLd(html, options.baseUrl).filter((item) => item.title && item.url && item.price != null);
-  if (fromLd.length >= 1 && !options.css) return dedupe(fromLd);
+  if (fromLd.length >= 1 && !options.css) return dedupe(fromLd.map((item) => ({ ...item, title: decodeEntities(item.title) })));
   const fromState = listingsFromEmbeddedState(html, options.baseUrl);
   const $ = cheerio.load(html);
   const fromAnchors = listingsFromAnchors($, options);

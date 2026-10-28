@@ -1,0 +1,89 @@
+{
+ "_note": "trimmed from search.rozetka.com.ua (query ноутбук) and product-api get-main, 2026-10-28",
+ "search": {
+  "data": {
+   "goods": [
+    {
+     "id": 553197315,
+     "relevance": null
+    },
+    {
+     "id": 537850884,
+     "relevance": null
+    },
+    {
+     "id": 583102189,
+     "relevance": null
+    }
+   ],
+   "pagination": {
+    "page_size": 60,
+    "show_next": 60,
+    "shown_page": 1,
+    "total_pages": 17
+   }
+  }
+ },
+ "products": {
+  "553197315": {
+   "data": {
+    "id": 553197315,
+    "title": "Ноутбук Lenovo LOQ 15ARP9 (83JC00NFRA) Luna Grey / 15.6\" IPS 144 Гц / AMD Ryzen 5 7235HS / RAM 16 ГБ / SSD 512 ГБ / RTX 3050, 6 ГБ (TDP 95 Вт) / LAN / RGB Підсвітка клавіатури",
+    "price": 48888,
+    "old_price": 59999,
+    "href": "https://rozetka.com.ua/ua/lenovo-83jc00nfra/p553197315/",
+    "sell_status": "available",
+    "status": "active",
+    "state": "new",
+    "brand": "Lenovo",
+    "images": [
+     {
+      "preview": {
+       "url": "https://content2.rozetka.com.ua/goods/images/preview/666684379.jpg"
+      }
+     }
+    ]
+   }
+  },
+  "537850884": {
+   "data": {
+    "id": 537850884,
+    "title": "Ноутбук ASUS TUF Gaming A16 (2025) FA608UH-RV018 (90NR0KS1-M005W0) Jaeger Gray / 16\" IPS WUXGA 165 Гц / AMD Ryzen 7 260 / RAM 16 ГБ / SSD 512 ГБ / RTX 5050, 8 ГБ (TDP 115 Вт) / LAN",
+    "price": 89999,
+    "old_price": 0,
+    "href": "https://rozetka.com.ua/ua/asus-90nr0ks1-m005w0/p537850884/",
+    "sell_status": "available",
+    "status": "active",
+    "state": "new",
+    "brand": "ASUS",
+    "images": [
+     {
+      "preview": {
+       "url": "https://content1.rozetka.com.ua/goods/images/preview/667079062.jpg"
+      }
+     }
+    ]
+   }
+  },
+  "583102189": {
+   "data": {
+    "id": 583102189,
+    "title": "Ноутбук MSI Thin 15 B13V (B13VE-3484XUA) Cosmos Gray / 15.6\" IPS 144 Гц / Intel Core i5-13420H / RAM 16 ГБ / SSD 1 ТБ / RTX 4050, 6 ГБ (TDP 45 Вт)",
+    "price": 53999,
+    "old_price": 57999,
+    "href": "https://rozetka.com.ua/ua/msi-thin-15-b13ve-3484xua/p583102189/",
+    "sell_status": "available",
+    "status": "active",
+    "state": "new",
+    "brand": "MSI",
+    "images": [
+     {
+      "preview": {
+       "url": "https://content.rozetka.com.ua/goods/images/preview/496605798.jpg"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

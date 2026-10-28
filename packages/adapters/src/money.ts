@@ -30,6 +30,24 @@ export function parseMoney(raw: string): Money | null {
   return { amount, currency };
 }
 
+const AMOUNT = String.raw`\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?`;
+const PRICE_IN_TEXT = new RegExp(
+  String.raw`(?:(${AMOUNT})\s*(?:грн|uah|₴|usd|\$|eur|€))|(?:(?:\$|€|usd|eur)\s*(${AMOUNT}))`,
+  'i',
+);
+
+/**
+ * Card text mixes sizes, codes and counters with the price ("15.6\" ... код 1144508 ... 39 999 грн").
+ * Prefer the first amount written next to a currency; fall back to parseMoney.
+ */
+export function parseMoneyInText(raw: string): Money | null {
+  if (!raw) return null;
+  const source = raw.replace(/\u00a0|\u202f/g, ' ');
+  const match = PRICE_IN_TEXT.exec(source);
+  if (match) return parseMoney(match[0]);
+  return parseMoney(source);
+}
+
 export function formatThousands(amount: number): string {
   const rounded = Math.round(amount);
   return rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');

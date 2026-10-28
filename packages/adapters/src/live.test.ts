@@ -2,6 +2,7 @@ import { SITE_CATALOG, buildSearchUrl } from '@pricelens/shared';
 import { describe, expect, it } from 'vitest';
 import { extractListings } from './extract';
 import { RequestLayer } from './request';
+import { expandSearchPage } from './site-loaders';
 
 const live = process.env.RUN_LIVE === '1';
 
@@ -14,7 +15,7 @@ describe.skipIf(!live)('live contracts FR-REL-001', () => {
       { id: site.key, maxConcurrency: site.maxConcurrency, minDelayMs: site.minDelayMs },
       url,
     );
-    const items = extractListings(page.text, { baseUrl: `https://${site.domain}/` });
+    const items = extractListings(await expandSearchPage(url, page.text), { baseUrl: `https://${site.domain}/` });
     expect(items.length).toBeGreaterThanOrEqual(1);
   }, 60_000);
 });
