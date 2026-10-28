@@ -39,7 +39,7 @@ export function inQuietHours(now: Date, start: string, end: string): boolean {
   return inQuietHoursClock(parts.hour, parts.minute, start, end);
 }
 
-function fieldMatch(field: string, value: number, min: number, max: number): boolean {
+function fieldMatch(field: string, value: number, min: number, _max: number): boolean {
   if (field === '*') return true;
   return field.split(',').some((part) => {
     const [base, stepRaw] = part.split('/');

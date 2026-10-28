@@ -300,7 +300,7 @@ function Constructor() {
   const [token, setToken] = useState('test123');
   const [html, setHtml] = useState('');
   const [items, setItems] = useState<Array<{ title: string; price: number | null }>>([]);
-  const [param, setParam] = useState('');
+  const [_param, setParam] = useState('');
   const [name, setName] = useState('');
   const [domain, setDomain] = useState('');
   const [previewing, setPreviewing] = useState(false);
@@ -491,7 +491,7 @@ function Constructor() {
               });
               setSaved(true);
             }
-          } catch (err) {
+          } catch {
             setSaved(false);
             setError(t('errors.validation'));
           } finally {

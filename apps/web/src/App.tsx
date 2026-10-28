@@ -35,7 +35,6 @@ export function App() {
       })
       .catch(() => setMe(null));
     // Apply the saved account once; later edits go through the header.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (me === undefined) {

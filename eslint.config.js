@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const tseslint = require('typescript-eslint');
 
 module.exports = tseslint.config(

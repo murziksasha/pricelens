@@ -42,7 +42,7 @@ describe('email notifications FR-NTF-001', () => {
       user2: { id: 'user2', email: 'optout@example.com', emailOptIn: false },
     };
 
-    let notifications = [
+    const notifications = [
       {
         id: 'n1',
         userId: 'user1',

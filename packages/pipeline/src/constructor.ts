@@ -87,8 +87,8 @@ export function healFromHtml(html: string, css: string) {
   return proposeHeal(html, css);
 }
 
-const FIELDS = ['title', 'price', 'url', 'image', 'location', 'date', 'description'] as const;
-export type ConstructorField = (typeof FIELDS)[number];
+export const CONSTRUCTOR_FIELDS = ['title', 'price', 'url', 'image', 'location', 'date', 'description'] as const;
+export type ConstructorField = (typeof CONSTRUCTOR_FIELDS)[number];
 
 /** Click mapping for the same-origin preview: the picker posts the clicked text. */
 export function assignClickedValue(field: ConstructorField, sample: string) {

@@ -1,7 +1,7 @@
 {
   "name": "pricelens",
   "private": true,
-  "packageManager": "pnpm@11.18.0",
+  "packageManager": "pnpm@12.15.0",
   "engines": {
     "node": ">=22"
   },
@@ -15,7 +15,7 @@
     "test": "turbo test",
     "test:integration": "pnpm --filter @pricelens/db test:integration && pnpm --filter @pricelens/pipeline test:integration && pnpm --filter @pricelens/api test:integration",
     "test:e2e": "pnpm --filter @pricelens/web test:e2e",
-    "ci": "pnpm generate && pnpm typecheck && pnpm test && pnpm test:integration",
+    "ci": "pnpm generate && pnpm lint && pnpm typecheck && pnpm test && pnpm test:integration",
     "docker:up": "docker compose up -d",
     "docker:up:build": "docker compose up -d --build",
     "docker:down": "docker compose down",

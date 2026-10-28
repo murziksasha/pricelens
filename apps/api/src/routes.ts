@@ -4,7 +4,6 @@ import { hashPassword } from '@pricelens/db';
 import {
   assignClickedValue,
   audit,
-  checkSite,
   createBackup,
   deleteBackup,
   detectQueryParam,
@@ -20,7 +19,6 @@ import {
   recordPurchase,
   restoreBackup,
   runSearch,
-  runTemplate,
   saveSelection,
   saveUploadedBackup,
   searchProgress,
