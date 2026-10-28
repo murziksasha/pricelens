@@ -26,7 +26,7 @@ pnpm --filter @pricelens/api dev
 pnpm --filter @pricelens/web dev
 ```
 
-`INLINE_SEARCH=1` (the default outside Compose) runs a search inside the API process. Compose sets `INLINE_SEARCH=0` so the worker claims queued searches.
+`INLINE_SEARCH=0` (the default in `.env.example` and Compose) queues searches for the worker, which `pnpm dev` also starts. `INLINE_SEARCH=1` runs a search inside the API process; tests and CI use it.
 
 `pnpm test` is unit tests. `pnpm test:integration` needs Postgres on `localhost:5432`. `RUN_LIVE=1 pnpm --filter @pricelens/adapters test` hits the real sites.
 

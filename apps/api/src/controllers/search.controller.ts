@@ -67,7 +67,7 @@ export class SearchController {
 
   @Sse(':id/stream')
   stream(@Param('id') id: string) {
-    return interval(400).pipe(
+    return interval(1000).pipe(
       switchMap(() => from(searchProgress(this.prisma, id))),
       takeWhile((progress) => !progress.done && progress.status !== 'missing', true),
       map((progress) => ({ data: progress })),
