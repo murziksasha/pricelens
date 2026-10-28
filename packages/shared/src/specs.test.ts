@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractLaptopSpecs } from './specs';
+import { extractLaptopSpecs, groupKeyFromSpecs, groupKeyPrefix, specsCompatible } from './specs';
 
 const bases: Array<[string, { brand: string; model: string }]> = [
   ['Dell Latitude 5490', { brand: 'Dell', model: 'Latitude 5490' }],
@@ -84,5 +84,26 @@ const popularUsed: Array<[string, Partial<ReturnType<typeof extractLaptopSpecs>>
 describe('extractLaptopSpecs – popular used models', () => {
   it.each(popularUsed)('%s', (title, expected) => {
     expect(extractLaptopSpecs(title)).toMatchObject(expected);
+  });
+});
+
+describe('specsCompatible FR-GRP-004', () => {
+  const base = { brand: 'Dell', model: 'Latitude 5490', cpu: 'i5-8350U', ramGb: 8, storageGb: 256, gpu: null, screenIn: null };
+  it('matches identical configurations', () => {
+    expect(specsCompatible(base, { ...base })).toBe(true);
+  });
+  it('rejects different RAM, storage or CPU', () => {
+    expect(specsCompatible(base, { ...base, ramGb: 16 })).toBe(false);
+    expect(specsCompatible(base, { ...base, storageGb: 512 })).toBe(false);
+    expect(specsCompatible(base, { ...base, cpu: 'i5-8250U' })).toBe(false);
+  });
+  it('strict mode keeps unknown RAM/storage out of a known group; CPU may be unknown', () => {
+    expect(specsCompatible(base, { ...base, ramGb: null })).toBe(false);
+    expect(specsCompatible(base, { ...base, ramGb: null }, { strict: false })).toBe(true);
+    expect(specsCompatible(base, { ...base, cpu: null })).toBe(true);
+  });
+  it('builds a brand+model prefix of the group key', () => {
+    expect(groupKeyFromSpecs(base)!.startsWith(groupKeyPrefix(base)!)).toBe(true);
+    expect(groupKeyPrefix({ brand: 'Dell', model: null })).toBeNull();
   });
 });

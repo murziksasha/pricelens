@@ -15,6 +15,7 @@ import {
   weightedMedian,
   extractLaptopSpecs,
   groupKeyFromSpecs,
+  groupKeyPrefix,
   scheduleDue,
   shouldNotify,
   specConfidence,
@@ -117,7 +118,12 @@ export async function attachGroup(prisma: Db, listingId: string) {
   if (!key || specConfidence(specs) < 0.5) return;
   let product = await prisma.product.findUnique({ where: { groupKey: key } });
   if (!product) {
-    const candidates = await prisma.product.findMany({ take: 300, orderBy: { confidence: 'desc' } });
+    const prefix = groupKeyPrefix(specs)!;
+    const candidates = await prisma.product.findMany({
+      where: { groupKey: { startsWith: prefix } },
+      orderBy: { confidence: 'desc' },
+      take: 50,
+    });
     product =
       candidates.find((candidate) => specsCompatible(specs, candidate.specs as unknown as LaptopSpecs)) ?? null;
   }

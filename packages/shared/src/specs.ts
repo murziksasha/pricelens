@@ -174,16 +174,30 @@ export function displayGroupName(specs: LaptopSpecs): string {
     .join(' / ');
 }
 
-export function specsCompatible(a: LaptopSpecs, b: LaptopSpecs): boolean {
+/**
+ * FR-GRP-004 automatic matching. Strict mode (default) does not put a listing with unknown RAM or
+ * storage into a group where that value is known (an 8 GB unit must not land in a 16 GB group).
+ */
+export function specsCompatible(a: LaptopSpecs, b: LaptopSpecs, opts: { strict?: boolean } = {}): boolean {
+  const strict = opts.strict ?? true;
   if (!a.brand || !b.brand || a.brand !== b.brand) return false;
   if (!a.model || !b.model) return false;
   const sameModel =
     a.model.toLowerCase() === b.model.toLowerCase() || trigramSimilarity(a.model, b.model) >= 0.86;
   if (!sameModel) return false;
-  if (a.ramGb && b.ramGb && a.ramGb !== b.ramGb) return false;
-  if (a.storageGb && b.storageGb && a.storageGb !== b.storageGb) return false;
-  if (a.cpu && b.cpu && a.cpu.toLowerCase() !== b.cpu.toLowerCase()) return false;
+  for (const key of ['ramGb', 'storageGb', 'cpu'] as const) {
+    const x = a[key];
+    const y = b[key];
+    if (x != null && y != null && String(x).toLowerCase() !== String(y).toLowerCase()) return false;
+    if (strict && key !== 'cpu' && (x == null) !== (y == null)) return false;
+  }
   return true;
+}
+
+/** Prefix of groupKeyFromSpecs() shared by every configuration of one brand + model. */
+export function groupKeyPrefix(specs: Pick<LaptopSpecs, 'brand' | 'model'>): string | null {
+  if (!specs.brand || !specs.model) return null;
+  return `${specs.brand}|${specs.model}|`.toLowerCase();
 }
 
 export function specConfidence(specs: LaptopSpecs): number {
