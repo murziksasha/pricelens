@@ -607,10 +607,15 @@ function Settings() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fxRates, setFxRates] = useState<Array<{ currency: string; rate: number; date: string }>>([]);
   function load() {
     api<Record<string, unknown>>('/api/admin/settings').then((data) => {
       const next: Record<string, string> = {};
-      for (const [key, value] of Object.entries(data)) next[key] = String(value ?? '');
+      for (const [key, value] of Object.entries(data)) {
+        if (key === 'fx_rates') continue;
+        next[key] = String(value ?? '');
+      }
+      setFxRates(Array.isArray(data.fx_rates) ? (data.fx_rates as typeof fxRates) : []);
       setForm(next);
     });
   }
@@ -684,6 +689,30 @@ function Settings() {
           onChange={(event) => setForm({ ...form, cost_repair: event.target.value })}
         />
       </label>
+      <label className="field">
+        {t('settings.fxMode')}
+        <select value={form.fx_mode || 'nbu'} onChange={(event) => setForm({ ...form, fx_mode: event.target.value })}>
+          <option value="nbu">{t('settings.fxModeNbu')}</option>
+          <option value="manual">{t('settings.fxModeManual')}</option>
+        </select>
+      </label>
+      <label className="field">
+        {t('settings.fxUsd')}
+        <input value={form.fx_usd_uah || ''} onChange={(event) => setForm({ ...form, fx_usd_uah: event.target.value })} />
+      </label>
+      <label className="field">
+        {t('settings.fxEur')}
+        <input value={form.fx_eur_uah || ''} onChange={(event) => setForm({ ...form, fx_eur_uah: event.target.value })} />
+      </label>
+      <label className="field">
+        {t('settings.fxSpread')}
+        <input value={form.fx_spread_pct || ''} onChange={(event) => setForm({ ...form, fx_spread_pct: event.target.value })} />
+      </label>
+      <p className="muted">
+        {fxRates.length
+          ? fxRates.map((row) => t('settings.fxLatest', { currency: row.currency, rate: row.rate, date: row.date })).join(' · ')
+          : t('settings.fxNone')}
+      </p>
       <label className="field">
         {t('settings.googleKey')}
         <input

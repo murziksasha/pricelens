@@ -4,6 +4,7 @@ import { hashPassword } from '@pricelens/db';
 import {
   assignClickedValue,
   audit,
+  latestRateInfo,
   createBackup,
   deleteBackup,
   detectQueryParam,
@@ -471,8 +472,21 @@ export class SearchController {
 
   private async table(id: string) {
     const rows = await searchRows(this.prisma, id);
-    const header = ['title', 'price', 'currency', 'site', 'location', 'condition', 'url', 'deal'];
-    return [header, ...rows.map((row) => [row.title, String(row.price), row.currency, row.siteName, row.location ?? '', row.condition, row.url, row.deal.label])];
+    const header = ['title', 'price', 'currency', 'price_uah', 'site', 'location', 'condition', 'url', 'deal'];
+    return [
+      header,
+      ...rows.map((row) => [
+        row.title,
+        String(row.price),
+        row.currency,
+        row.priceUah == null ? '' : String(row.priceUah),
+        row.siteName,
+        row.location ?? '',
+        row.condition,
+        row.url,
+        row.deal.label,
+      ]),
+    ];
   }
 }
 
@@ -822,6 +836,7 @@ export class AdminController {
       google_api_key: secret(settings.google_api_key),
       telegram_bot_token: secret(settings.telegram_bot_token),
       smtp_password: secret(settings.smtp_password),
+      fx_rates: await latestRateInfo(this.prisma),
     };
   }
 
@@ -829,7 +844,7 @@ export class AdminController {
   async saveSettings(@Req() req: Request, @Body() body: Record<string, unknown>) {
     const current = await readSettings(this.prisma);
     for (const [key, value] of Object.entries(body)) {
-      if (value === '***') continue;
+      if (value === '***' || key === 'fx_rates') continue;
       const stored =
         key === 'google_api_key' || key === 'telegram_bot_token' || key === 'smtp_password'
           ? value || current[key]

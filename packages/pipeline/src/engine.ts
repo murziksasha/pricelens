@@ -17,9 +17,12 @@ import {
   shouldNotify,
   specConfidence,
   specsCompatible,
+  toUah,
   type LaptopSpecs,
+  type Rates,
   type NotifyRules,
 } from '@pricelens/shared';
+import { loadRates } from './fx';
 
 type Db = PrismaClient;
 
@@ -134,7 +137,8 @@ export async function attachGroup(prisma: Db, listingId: string) {
   });
 }
 
-async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, draft: ListingDraft, price: number) {
+/** FR-VIS-003. Prices are compared in UAH so a $400 ad and a 16 400 грн ad can match. */
+async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, draft: ListingDraft, price: number | null) {
   const listing = await prisma.listing.findUnique({ where: { id: listingId } });
   if (!listing) return;
   const sameExternal = draft.externalId
@@ -142,11 +146,14 @@ async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, 
         where: { siteId, externalId: draft.externalId, NOT: { id: listingId } },
       })
     : null;
-  const near = await prisma.listing.findMany({
-    where: { NOT: { id: listingId }, price: { gte: price * 0.9, lte: price * 1.1 } },
-    orderBy: { lastSeenAt: 'desc' },
-    take: 20,
-  });
+  const near =
+    price != null && price > 0
+      ? await prisma.listing.findMany({
+          where: { NOT: { id: listingId }, priceUah: { gte: price * 0.9, lte: price * 1.1 } },
+          orderBy: { lastSeenAt: 'desc' },
+          take: 20,
+        })
+      : [];
   const pool = sameExternal ? [sameExternal, ...near] : near;
   for (const other of pool) {
     const decision = duplicateDecision(
@@ -155,7 +162,7 @@ async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, 
         siteId,
         externalId: listing.externalId,
         title: listing.title,
-        price,
+        price: price ?? 0,
         imageHash: listing.imageHash,
       },
       {
@@ -163,7 +170,7 @@ async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, 
         siteId: other.siteId,
         externalId: other.externalId,
         title: other.title,
-        price: num(other.price),
+        price: other.priceUah != null ? num(other.priceUah) : 0,
         imageHash: other.imageHash,
       },
     );
@@ -179,15 +186,17 @@ async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, 
   }
 }
 
-async function upsertDraft(prisma: Db, siteId: string, draft: ListingDraft, fallbackCondition: string) {
+async function upsertDraft(prisma: Db, siteId: string, draft: ListingDraft, fallbackCondition: string, rates: Rates) {
   const price = draft.price ?? 0;
   const currency = draft.currency ?? 'UAH';
+  const priceUah = toUah(price, currency, rates);
   const existing = await prisma.listing.findUnique({ where: { url: draft.url } });
   const data = {
     siteId,
     title: draft.title,
     price,
     currency,
+    priceUah,
     location: draft.location ?? null,
     postedAt: draft.postedAt ? new Date(draft.postedAt) : null,
     imageUrl: draft.imageUrl ?? null,
@@ -214,7 +223,7 @@ async function upsertDraft(prisma: Db, siteId: string, draft: ListingDraft, fall
   if (!existing || changed) {
     await prisma.listingPrice.create({ data: { listingId: listing.id, price } });
   }
-  await rememberDuplicate(prisma, listing.id, siteId, draft, price);
+  await rememberDuplicate(prisma, listing.id, siteId, draft, priceUah);
   await attachGroup(prisma, listing.id);
   return { listing, changed: Boolean(existing && changed), isNew: !existing };
 }
@@ -225,6 +234,7 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
   const filters = (search.filters ?? {}) as SearchFilters;
   const now = deps.now ?? new Date();
   const settings = await readSettings(prisma);
+  const rates = await loadRates(prisma, settings);
   const sites = await prisma.site.findMany({
     where: { id: { in: search.siteIds }, enabled: true },
     orderBy: { priority: 'asc' },
@@ -288,7 +298,7 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
         const ids: string[] = [];
         for (const draft of drafts) {
           if (draft.price == null) continue;
-          const saved = await upsertDraft(prisma, site.id, draft, site.defaultCondition);
+          const saved = await upsertDraft(prisma, site.id, draft, site.defaultCondition, rates);
           ids.push(saved.listing.id);
         }
         await prisma.searchCache.upsert({
@@ -360,6 +370,9 @@ export async function searchRows(prisma: Db, searchId: string) {
   const defaultMargin = Number(settings.min_margin_uah ?? DEFAULT_MIN_MARGIN_UAH);
   const costs = Number(settings.cost_delivery ?? 0) + Number(settings.cost_repair ?? 0);
   const since = new Date(Date.now() - 30 * 86_400_000);
+  const rates = await loadRates(prisma, settings);
+  const uah = (l: { priceUah: unknown; price: unknown; currency: string }): number | null =>
+    l.priceUah != null ? num(l.priceUah) : toUah(num(l.price), l.currency, rates);
   const results = await prisma.searchResult.findMany({
     where: { searchId },
     orderBy: { rank: 'asc' },
@@ -404,13 +417,21 @@ export async function searchRows(prisma: Db, searchId: string) {
           member.listing.condition === 'used' &&
           member.listing.lastSeenAt >= since,
       )
-      .map((member) => num(member.listing.price));
-    const fresh = groupMembers.filter((member) => member.listing.condition === 'new').map((member) => num(member.listing.price));
-    const deal = dealScore(num(listing.price), used, { green, yellow });
+      .map((member) => uah(member.listing))
+      .filter((value): value is number => value != null);
+    const fresh = groupMembers
+      .filter((member) => member.listing.condition === 'new')
+      .map((member) => uah(member.listing))
+      .filter((value): value is number => value != null);
+    const listingUah = uah(listing);
+    const deal =
+      listingUah == null
+        ? ({ score: null, label: 'insufficient', median: null, samples: used.length } as const)
+        : dealScore(listingUah, used, { green, yellow });
     const expected = product?.expectedSalePrice != null ? num(product.expectedSalePrice) : deal.median;
     const profit =
-      expected != null
-        ? expectedProfit({ expectedSalePrice: expected, listingPrice: num(listing.price), costs })
+      expected != null && listingUah != null
+        ? expectedProfit({ expectedSalePrice: expected, listingPrice: listingUah, costs })
         : null;
     const history = purchases.filter((purchase) => purchase.productGroupId === product?.id);
     const last = history[0];
@@ -421,6 +442,7 @@ export async function searchRows(prisma: Db, searchId: string) {
       title: listing.title,
       price: num(listing.price),
       currency: listing.currency,
+      priceUah: listingUah,
       url: listing.url,
       siteId: listing.siteId,
       siteName: listing.site.name,
@@ -446,7 +468,7 @@ export async function searchRows(prisma: Db, searchId: string) {
       bought: last
         ? { count: history.length, lastPrice: num(last.price), lastAt: last.purchasedAt.toISOString() }
         : null,
-      priceHint: last ? num(last.price) - num(listing.price) : null,
+      priceHint: last && listingUah != null ? num(last.price) - listingUah : null,
     };
   });
 }

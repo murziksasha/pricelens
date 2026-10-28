@@ -282,5 +282,14 @@
   "specs.storage": "Накопитель",
   "specs.gpu": "Видеокарта",
   "specs.screen": "Экран",
-  "menu.account": "Аккаунт"
+  "menu.account": "Аккаунт",
+  "settings.fxMode": "Источник курса валют",
+  "settings.fxModeNbu": "Официальный курс НБУ (ежедневно), ручной как запасной",
+  "settings.fxModeManual": "Ручной курс ниже",
+  "settings.fxUsd": "USD → UAH (вручную)",
+  "settings.fxEur": "EUR → UAH (вручную)",
+  "settings.fxSpread": "Надбавка к курсу, % (рынок vs НБУ)",
+  "settings.fxLatest": "НБУ {currency}: {rate} на {date}",
+  "settings.fxNone": "Курсов НБУ ещё нет; воркер обновляет их каждые 6 часов.",
+  "results.approxUah": "≈ {amount} грн"
 }

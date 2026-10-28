@@ -1,4 +1,5 @@
 export * from './deal';
+export * from './fx';
 export * from './text';
 export * from './duplicate';
 export * from './specs';

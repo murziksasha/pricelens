@@ -282,5 +282,14 @@
   "specs.storage": "Накопичувач",
   "specs.gpu": "Відеокарта",
   "specs.screen": "Екран",
-  "menu.account": "Обліковий запис"
+  "menu.account": "Обліковий запис",
+  "settings.fxMode": "Джерело курсу валют",
+  "settings.fxModeNbu": "Офіційний курс НБУ (щодня), ручний як запасний",
+  "settings.fxModeManual": "Ручний курс нижче",
+  "settings.fxUsd": "USD → UAH (вручну)",
+  "settings.fxEur": "EUR → UAH (вручну)",
+  "settings.fxSpread": "Надбавка до курсу, % (ринок vs НБУ)",
+  "settings.fxLatest": "НБУ {currency}: {rate} на {date}",
+  "settings.fxNone": "Курсів НБУ ще немає; воркер оновлює їх кожні 6 годин.",
+  "results.approxUah": "≈ {amount} грн"
 }

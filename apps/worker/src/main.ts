@@ -13,6 +13,7 @@ import {
   runSearch,
   telegramListingMessage,
   dispatchEmailNotifications,
+  refreshNbuRates,
 } from '@pricelens/pipeline';
 import { capturePage, readRenderedHtml } from './browser';
 
@@ -49,6 +50,16 @@ async function load(
     url,
   );
   return result.text;
+}
+
+let lastFxRefresh = 0;
+
+/** FR-ADM-002: refresh NBU USD/EUR rates every 6 hours (idempotent upsert). */
+async function maybeRefreshFx() {
+  if (process.env.FX_AUTORUN === '0') return;
+  if (Date.now() - lastFxRefresh < 6 * 3600_000) return;
+  lastFxRefresh = Date.now();
+  await refreshNbuRates(prisma);
 }
 
 let telegramOffset = 0;
@@ -244,6 +255,7 @@ async function main() {
     await pollTelegram().catch((error) => console.error(error));
     await dispatchEmailNotifications(prisma).catch((error) => console.error(error));
     await shots().catch((error) => console.error(error));
+    await maybeRefreshFx().catch((error) => console.error('fx_refresh_failed', error));
   };
   await maybeBackup().catch((error) => console.error(error));
   setInterval(() => {

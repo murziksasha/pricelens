@@ -1,4 +1,5 @@
 export * from './engine';
+export * from './fx';
 export * from './backup-files';
 export * from './backups';
 export * from './sheet';

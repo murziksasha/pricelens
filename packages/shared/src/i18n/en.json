@@ -282,5 +282,14 @@
   "specs.storage": "Storage",
   "specs.gpu": "GPU",
   "specs.screen": "Screen",
-  "menu.account": "Account"
+  "menu.account": "Account",
+  "settings.fxMode": "Exchange rate source",
+  "settings.fxModeNbu": "NBU official (daily), manual as fallback",
+  "settings.fxModeManual": "Manual rates below",
+  "settings.fxUsd": "USD → UAH (manual)",
+  "settings.fxEur": "EUR → UAH (manual)",
+  "settings.fxSpread": "Rate markup, % (market vs NBU)",
+  "settings.fxLatest": "NBU {currency}: {rate} on {date}",
+  "settings.fxNone": "No NBU rates stored yet; the worker fetches them every 6 hours.",
+  "results.approxUah": "≈ {amount} UAH"
 }

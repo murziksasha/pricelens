@@ -269,6 +269,7 @@ model Listing {
   condition   String    @default("unknown")
   description String?
   seller      String?
+  priceUah    Decimal?  @map("price_uah") @db.Decimal(14, 2)
   firstSeenAt DateTime  @default(now()) @map("first_seen_at")
   lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
 
@@ -285,6 +286,7 @@ model Listing {
 
   @@index([siteId, externalId])
   @@index([title])
+  @@index([priceUah])
   @@map("listings")
 }
 
@@ -487,4 +489,18 @@ model BrowserShot {
   site        Site?    @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   @@map("browser_shots")
+}
+
+/// Currency -> UAH rates (NBU official, or manual). Used to compare listings priced in USD/EUR.
+model ExchangeRate {
+  id        String   @id @default(uuid()) @db.Uuid
+  currency  String
+  rateToUah Decimal  @map("rate_to_uah") @db.Decimal(14, 6)
+  date      DateTime @db.Date
+  source    String   @default("nbu")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([currency, date, source])
+  @@index([currency, date])
+  @@map("exchange_rates")
 }

@@ -10,6 +10,7 @@ interface ResultRow {
   title: string;
   price: number;
   currency: string;
+  priceUah: number | null;
   url: string;
   siteName: string;
   location: string | null;
@@ -248,7 +249,14 @@ export function SearchPage() {
                         {row.usedRange && <span className="muted"> {t('groups.rangeUsed')} {row.usedRange.min}-{row.usedRange.max}</span>}
                       </td>
                     )}
-                    {cols.includes('price') && <td>{row.price} {row.currency}</td>}
+                    {cols.includes('price') && (
+                      <td>
+                        {row.price} {row.currency}
+                        {row.currency !== 'UAH' && row.priceUah != null && (
+                          <div className="muted">{t('results.approxUah', { amount: Math.round(row.priceUah) })}</div>
+                        )}
+                      </td>
+                    )}
                     {cols.includes('site') && <td>{row.siteName}</td>}
                     {cols.includes('location') && <td>{row.location}</td>}
                     {cols.includes('condition') && <td>{row.condition}</td>}
