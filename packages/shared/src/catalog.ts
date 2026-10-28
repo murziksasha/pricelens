@@ -323,6 +323,9 @@ export function buildSearchUrl(
       url = url.replaceAll(`{${key}}`, encodeURIComponent(String(value)));
     }
   }
+  // Placeholders nobody supplied (e.g. {price_min} when the caller passed no price) are dropped too;
+  // sending a literal "{price_min}" makes OLX answer with an empty result page.
+  url = url.replace(/[&?][^=&?]*=\{\w+\}/g, (match) => (match.startsWith('?') ? '?' : '')).replace(/\{\w+\}/g, '');
   url = url.replace(/[?&]$/, '').replace('?&', '?').replace(/&&+/g, '&');
   return url;
 }

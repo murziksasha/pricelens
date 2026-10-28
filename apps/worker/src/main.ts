@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { RequestLayer, assertPublicHttpUrl } from '@pricelens/adapters';
+import { RequestLayer, assertPublicHttpUrl, extractListings, looksBlockedPage } from '@pricelens/adapters';
 import { cronMatches } from '@pricelens/shared';
 import {
   checkSite,
@@ -34,14 +34,19 @@ const layer = new RequestLayer({
 });
 
 async function load(
-  site: { id: string; maxConcurrency: number; minDelayMs: number; pausedUntil: Date | null; useBrowser?: boolean },
+  site: { id: string; domain?: string; maxConcurrency: number; minDelayMs: number; pausedUntil: Date | null; useBrowser?: boolean },
   url: string,
 ) {
   if (site.useBrowser) {
     await guardUrl(url);
     try {
       const rendered = await readRenderedHtml(url);
-      if (rendered) return rendered;
+      // Use the rendered page only when it really has listings; a block, consent or challenge page
+      // falls through to the HTTP/2 fetch below instead of showing "no listings".
+      const usable =
+        rendered && !looksBlockedPage(rendered) && extractListings(rendered, { baseUrl: `https://${site.domain ?? ''}/` }).length > 0;
+      if (usable) return rendered;
+      console.error('browser_load_unusable', url);
     } catch (error) {
       console.error('browser_load_failed', error instanceof Error ? error.message : error);
     }

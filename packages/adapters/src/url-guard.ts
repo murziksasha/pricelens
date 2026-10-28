@@ -14,6 +14,8 @@ function ipv4ToInt(ip: string) {
   return ip.split('.').reduce((acc, part) => (acc << 8) + Number(part), 0) >>> 0;
 }
 
+// 198.18.0.0/15 is deliberately allowed: VPN/proxy clients in fake-IP DNS mode (Clash, sing-box, …)
+// resolve every public host into it, and blocking it would block every marketplace.
 const V4_RANGES: Array<[string, number]> = [
   ['0.0.0.0', 8],
   ['10.0.0.0', 8],
@@ -23,7 +25,6 @@ const V4_RANGES: Array<[string, number]> = [
   ['172.16.0.0', 12],
   ['192.0.0.0', 24],
   ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
   ['224.0.0.0', 3],
 ];
 
