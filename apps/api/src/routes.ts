@@ -69,6 +69,7 @@ import {
   recordLoginFailure,
 } from './auth';
 import { getLoader } from './loader';
+import { assertPublicHttpUrl } from '@pricelens/adapters';
 import { PrismaService } from './prisma.service';
 import { sessionExpiry } from './session';
 
@@ -1042,6 +1043,11 @@ export class AdminController {
     let html = body.html ?? '';
     if (!html && pageUrl) {
       try {
+        await assertPublicHttpUrl(pageUrl);
+      } catch {
+        return { html: '', items: [], url: pageUrl, error: 'blocked_url' };
+      }
+      try {
         html = await getLoader()({ id: 'preview', key: 'preview', maxConcurrency: 1, minDelayMs: 0, pausedUntil: null }, pageUrl);
       } catch (error) {
         const code = error instanceof Error ? error.message : 'upstream_error';
@@ -1106,7 +1112,14 @@ export class AdminController {
   }
 
   @Post('constructor/screenshot')
-  async screenshot(@Body() body: { url: string; siteId?: string }) {
-    return this.prisma.browserShot.create({ data: { url: body.url, siteId: body.siteId, status: 'queued' } });
+  async screenshot(@Body() body: { url?: unknown; siteId?: unknown }) {
+    if (typeof body?.url !== 'string' || body.url.length > 2000) throw new HttpException({ error: 'validation_error' }, 400);
+    try {
+      await assertPublicHttpUrl(body.url);
+    } catch {
+      throw new HttpException({ error: 'blocked_url' }, 400);
+    }
+    const siteId = typeof body.siteId === 'string' ? body.siteId : undefined;
+    return this.prisma.browserShot.create({ data: { url: body.url, siteId, status: 'queued' } });
   }
 }

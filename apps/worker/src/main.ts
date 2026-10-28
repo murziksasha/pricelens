@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { RequestLayer } from '@pricelens/adapters';
+import { RequestLayer, assertPublicHttpUrl } from '@pricelens/adapters';
 import { cronMatches } from '@pricelens/shared';
 import {
   checkSite,
@@ -18,7 +18,12 @@ import {
 import { capturePage, readRenderedHtml } from './browser';
 
 const prisma = new PrismaClient();
+const guardUrl = async (url: string) => {
+  await assertPublicHttpUrl(url);
+};
+
 const layer = new RequestLayer({
+  urlGuard: guardUrl,
   onPause: async (siteId) => {
     await prisma.site.update({
       where: { id: siteId },
@@ -33,6 +38,7 @@ async function load(
   url: string,
 ) {
   if (site.useBrowser) {
+    await guardUrl(url);
     try {
       const rendered = await readRenderedHtml(url);
       if (rendered) return rendered;
@@ -125,6 +131,7 @@ async function shots() {
   for (const shot of queued) {
     await prisma.browserShot.update({ where: { id: shot.id }, data: { status: 'running' } });
     try {
+      await guardUrl(shot.url);
       const captured = await capturePage(shot.url);
       await prisma.browserShot.update({
         where: { id: shot.id },

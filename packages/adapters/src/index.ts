@@ -1,6 +1,7 @@
 export * from './money';
 export * from './dates';
 export * from './request';
+export * from './url-guard';
 export * from './extract';
 export * from './fixtures';
 export * from './google';

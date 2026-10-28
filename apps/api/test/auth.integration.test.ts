@@ -216,6 +216,19 @@ describe.skipIf(!run)('API integration', () => {
     expect(rolled.body.minDelayMs).toBe(before.minDelayMs);
   });
 
+  it('refuses internal URLs in the constructor (SSRF)', async () => {
+    resetLoginLimits();
+    const server = app.getHttpServer();
+    const admin = await request(server).post('/api/auth/login').send({ login: 'admin', password: 'test-password-123' });
+    const auth = { authorization: `Bearer ${admin.body.token}` };
+    for (const url of ['http://postgres:5432/', 'http://127.0.0.1:3000/api/users', 'file:///etc/passwd', 'http://169.254.169.254/']) {
+      const shot = await request(server).post('/api/admin/constructor/screenshot').set(auth).send({ url });
+      expect(shot.status, url).toBe(400);
+      const preview = await request(server).post('/api/admin/constructor/preview').set(auth).send({ url });
+      expect(preview.body.error, url).toBe('blocked_url');
+    }
+  });
+
   it('shares searches with the team but not with anonymous or inactive users', async () => {
     resetLoginLimits();
     const server = app.getHttpServer();

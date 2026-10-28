@@ -425,7 +425,8 @@ function Constructor() {
               body: JSON.stringify({ url, html, token }),
             });
             setItems(preview.items);
-            if (preview.error === 'upstream_blocked' || preview.error === 'site_paused') setError(t('constructor.blocked'));
+            if (preview.error === 'blocked_url') setError(t('constructor.blockedUrl'));
+            else if (preview.error === 'upstream_blocked' || preview.error === 'site_paused') setError(t('constructor.blocked'));
             else if (preview.items.length === 0) setError(t('constructor.previewEmpty'));
           } catch (err) {
             setError(err instanceof ApiError && (err.code === 'site_paused' || err.code === 'upstream_blocked') ? t('constructor.blocked') : t('constructor.previewEmpty'));

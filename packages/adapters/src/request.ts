@@ -58,6 +58,8 @@ export class RequestLayer {
       proxy?: ProxyHook;
       onPause?: (siteId: string, reason: string) => void | Promise<void>;
       timeoutMs?: number;
+      /** Called for the first URL and every redirect hop; throw to refuse (SSRF guard). */
+      urlGuard?: (url: string) => Promise<void>;
     } = {},
   ) {}
 
@@ -105,21 +107,33 @@ export class RequestLayer {
           accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
           'accept-language': 'uk,ru;q=0.9,en;q=0.8',
         };
-        let target = url;
-        let init: RequestInit = { headers, redirect: 'follow' };
-        if (this.opts.proxy) {
-          const decorated = await this.opts.proxy.decorate(target, init);
-          target = decorated.url;
-          init = decorated.init;
-        }
+        const guard = this.opts.urlGuard;
         const fetchImpl = this.opts.fetchImpl ?? fetch;
         const controller = new AbortController();
         const timeoutMs = this.opts.timeoutMs ?? 20_000;
         const timer = setTimeout(() => controller.abort(), timeoutMs);
-        let response: Response;
+        let target = url;
+        let response!: Response;
         let text: string;
         try {
-          response = await fetchImpl(target, { ...init, signal: controller.signal });
+          // With a guard, redirects are followed by hand so every hop is checked (at most 5).
+          let hop = url;
+          for (let redirects = 0; ; redirects += 1) {
+            if (guard) await guard(hop);
+            target = hop;
+            let init: RequestInit = { headers, redirect: guard ? 'manual' : 'follow' };
+            if (this.opts.proxy) {
+              const decorated = await this.opts.proxy.decorate(target, init);
+              target = decorated.url;
+              init = decorated.init;
+            }
+            response = await fetchImpl(target, { ...init, signal: controller.signal });
+            const location = response.headers.get('location');
+            if (!guard || response.status < 300 || response.status >= 400 || !location) break;
+            if (redirects >= 5) throw new UpstreamError(response.status, 'too_many_redirects');
+            await response.body?.cancel().catch(() => undefined);
+            hop = new URL(location, hop).toString();
+          }
           text = await response.text();
         } catch (err: unknown) {
           if (controller.signal.aborted || (err as { name?: string })?.name === 'AbortError') {

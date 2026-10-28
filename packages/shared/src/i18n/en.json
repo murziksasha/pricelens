@@ -324,5 +324,6 @@
   "settings.minOwnSales": "Own sales: minimum units",
   "settings.useAllocated": "Use split prices from mixed lots",
   "search.failed": "The search failed.",
-  "search.retry": "Retry"
+  "search.retry": "Retry",
+  "constructor.blockedUrl": "Only public http(s) sites can be previewed; local and internal addresses are blocked."
 }

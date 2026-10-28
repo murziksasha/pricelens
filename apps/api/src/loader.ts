@@ -1,7 +1,12 @@
-import { RequestLayer, type SiteBudget } from '@pricelens/adapters';
+import { RequestLayer, assertPublicHttpUrl, type SiteBudget } from '@pricelens/adapters';
 import type { LoadPage } from '@pricelens/pipeline';
 
-const layer = new RequestLayer();
+// Every fetch (search, constructor preview) refuses private/internal targets and checks redirects.
+const layer = new RequestLayer({
+  urlGuard: async (url) => {
+    await assertPublicHttpUrl(url);
+  },
+});
 
 export const defaultLoad: LoadPage = async (site, url) => {
   const budget: SiteBudget = {
