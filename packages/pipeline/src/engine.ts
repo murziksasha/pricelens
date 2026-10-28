@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { applyFilters, extractListings, googleSiteSearch, type ListingDraft } from '@pricelens/adapters';
+import { applyFilters, extractListings, googleSiteSearch, looksBlockedPage, type ListingDraft } from '@pricelens/adapters';
 import type { PrismaClient } from '@pricelens/db';
 import {
   detectDefects,
@@ -282,7 +282,7 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
         const cached = search.refresh
           ? null
           : await prisma.searchCache.findUnique({ where: { siteId_cacheKey: { siteId: site.id, cacheKey: key } } });
-        if (cached && cacheFresh(cached.fetchedAt, now, site.pollIntervalMinutes)) {
+        if (cached && cached.listingIds.length > 0 && cacheFresh(cached.fetchedAt, now, site.pollIntervalMinutes)) {
           await linkResults(prisma, searchId, cached.listingIds);
           await prisma.searchSiteRun.update({
             where: { id: run.id },
@@ -317,6 +317,8 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
           });
           const html = await deps.load(site, url);
           drafts = extractListings(html, { baseUrl: `https://${site.domain}/` });
+          // A block page is an error, not "no listings" (and must not be cached as an empty result).
+          if (drafts.length === 0 && looksBlockedPage(html)) throw new Error('upstream_blocked');
         }
         drafts = applyFilters(drafts, filters);
         const ids: string[] = [];
@@ -329,11 +331,14 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
           const saved = await upsertDraft(prisma, site.id, draft, site.defaultCondition, rates, known);
           ids.push(saved.listing.id);
         }
-        await prisma.searchCache.upsert({
-          where: { siteId_cacheKey: { siteId: site.id, cacheKey: key } },
-          create: { siteId: site.id, cacheKey: key, fetchedAt: now, listingIds: ids },
-          update: { fetchedAt: now, listingIds: ids },
-        });
+        // Only cache non-empty results, so one bad fetch does not show "no listings" for 30 minutes.
+        if (ids.length) {
+          await prisma.searchCache.upsert({
+            where: { siteId_cacheKey: { siteId: site.id, cacheKey: key } },
+            create: { siteId: site.id, cacheKey: key, fetchedAt: now, listingIds: ids },
+            update: { fetchedAt: now, listingIds: ids },
+          });
+        }
         await linkResults(prisma, searchId, ids);
         if (process.env.PIPELINE_TIMING === '1') console.info(`site ${site.key}: ${ids.length} listings in ${Date.now() - started} ms`);
         await prisma.searchSiteRun.update({

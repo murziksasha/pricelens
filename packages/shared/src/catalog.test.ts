@@ -16,4 +16,13 @@ describe('site catalogue FR-SITE-010', () => {
     });
     expect(url).toBe('https://example.test/s?q=laptop&min=1000');
   });
+  it('drops filter placeholders the caller did not supply (OLX template)', () => {
+    const olx = SITE_CATALOG.find((site) => site.key === 'olx')!;
+    expect(buildSearchUrl(olx.urlTemplate, { query: 'ноутбук', page: 1 })).toBe(
+      'https://www.olx.ua/uk/list/q-%D0%BD%D0%BE%D1%83%D1%82%D0%B1%D1%83%D0%BA/?currency=UAH&page=1',
+    );
+    expect(buildSearchUrl(olx.urlTemplate, { query: 'x', price_min: 5000, page: 2 })).toBe(
+      'https://www.olx.ua/uk/list/q-x/?currency=UAH&search%5Bfilter_float_price%3Afrom%5D=5000&page=2',
+    );
+  });
 });
