@@ -322,5 +322,7 @@
   "settings.askingToSale": "Коефіцієнт продаж ÷ ціна оголошень",
   "settings.saleLookback": "Власні продажі: за скільки днів",
   "settings.minOwnSales": "Власні продажі: мінімум штук",
-  "settings.useAllocated": "Враховувати розподілені ціни зі змішаних лотів"
+  "settings.useAllocated": "Враховувати розподілені ціни зі змішаних лотів",
+  "search.failed": "Пошук не вдався.",
+  "search.retry": "Повторити"
 }

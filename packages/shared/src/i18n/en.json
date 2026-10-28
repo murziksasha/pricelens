@@ -322,5 +322,7 @@
   "settings.askingToSale": "Sale price ÷ asking price ratio",
   "settings.saleLookback": "Own sales: look back (days)",
   "settings.minOwnSales": "Own sales: minimum units",
-  "settings.useAllocated": "Use split prices from mixed lots"
+  "settings.useAllocated": "Use split prices from mixed lots",
+  "search.failed": "The search failed.",
+  "search.retry": "Retry"
 }

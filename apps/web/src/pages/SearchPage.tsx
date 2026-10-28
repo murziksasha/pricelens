@@ -56,6 +56,7 @@ export function SearchPage() {
   const [cols, setCols] = useState<string[]>(() => JSON.parse(localStorage.getItem('pricelens.cols') || 'null') || [...COLUMNS]);
   const [filter, setFilter] = useState('');
   const [searching, setSearching] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [savingPurchase, setSavingPurchase] = useState(false);
   const [recentPurchases, setRecentPurchases] = useState<Array<{ id: string; purchasedAt: string; items: Array<{ title: string }> }>>([]);
   const [addTo, setAddTo] = useState('');
@@ -91,6 +92,7 @@ export function SearchPage() {
     const siteIds = sites.filter((site) => site.selected).map((site) => site.id);
     if (!query || siteIds.length === 0) return;
     setSearching(true);
+    setFailed(false);
     setRuns([]);
     try {
       const created = await api<{ id: string }>('/api/searches', {
@@ -108,10 +110,11 @@ export function SearchPage() {
       });
       let done = false;
       while (!done) {
-        const view = await api<{ done: boolean; rows: ResultRow[]; runs: typeof runs }>(`/api/searches/${created.id}`);
+        const view = await api<{ done: boolean; failed?: boolean; rows: ResultRow[]; runs: typeof runs }>(`/api/searches/${created.id}`);
         setRows(view.rows);
         setRuns(view.runs);
         done = view.done;
+        if (view.failed) setFailed(true);
         if (!done) await new Promise((resolve) => setTimeout(resolve, 400));
       }
     } finally {
@@ -203,6 +206,14 @@ export function SearchPage() {
           )
         )}
         <p className="muted">{t('shortcuts.hint')}</p>
+        {failed && (
+          <p className="error">
+            {t('search.failed')}{' '}
+            <button type="button" onClick={() => search()}>
+              {t('search.retry')}
+            </button>
+          </p>
+        )}
         {runs.some((run) => run.status === 'error') && (
           <p className="error">{t('search.partial')}: {runs.filter((run) => run.error).map((run) => `${run.siteName} (${run.error})`).join(', ')}</p>
         )}

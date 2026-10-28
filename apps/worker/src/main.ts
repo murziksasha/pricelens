@@ -10,9 +10,9 @@ import {
   parseTelegramCallback,
   readSettings,
   runDueSchedules,
-  runSearch,
   telegramListingMessage,
   dispatchEmailNotifications,
+  drainQueuedSearches,
   refreshNbuRates,
 } from '@pricelens/pipeline';
 import { capturePage, readRenderedHtml } from './browser';
@@ -166,20 +166,7 @@ async function maybeBackup() {
 }
 
 async function drain() {
-  const queued = await prisma.search.findMany({ where: { status: 'queued' }, take: 4 });
-  for (const search of queued) {
-    const claim = await prisma.search.updateMany({
-      where: { id: search.id, status: 'queued' },
-      data: { status: 'running' },
-    });
-    if (claim.count !== 1) continue;
-    try {
-      await runSearch(prisma, search.id, { load });
-    } catch (error) {
-      console.error(error);
-      await prisma.search.update({ where: { id: search.id }, data: { status: 'complete' } });
-    }
-  }
+  await drainQueuedSearches(prisma, load);
 }
 
 async function drainHealth() {

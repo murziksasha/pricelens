@@ -24,7 +24,7 @@ import {
   removePurchaseItem,
   updatePurchase,
   restoreBackup,
-  runSearch,
+  runSearchSafely,
   saveSelection,
   saveUploadedBackup,
   searchProgress,
@@ -426,7 +426,7 @@ export class SearchController {
       const { publishSearch } = await import('./queue');
       await publishSearch(search.id);
     } else {
-      await runSearch(this.prisma, search.id, { load: getLoader() });
+      await runSearchSafely(this.prisma, search.id, getLoader());
     }
     return { id: search.id };
   }
@@ -716,7 +716,7 @@ export class TemplateController {
       const { publishSearch } = await import('./queue');
       await publishSearch(search.id);
     } else {
-      await runSearch(this.prisma, search.id, { load: getLoader() });
+      await runSearchSafely(this.prisma, search.id, getLoader());
     }
     return { id: search.id };
   }

@@ -322,5 +322,7 @@
   "settings.askingToSale": "Коэффициент продажа ÷ цена объявлений",
   "settings.saleLookback": "Свои продажи: за сколько дней",
   "settings.minOwnSales": "Свои продажи: минимум штук",
-  "settings.useAllocated": "Учитывать распределённые цены из смешанных лотов"
+  "settings.useAllocated": "Учитывать распределённые цены из смешанных лотов",
+  "search.failed": "Поиск не удался.",
+  "search.retry": "Повторить"
 }

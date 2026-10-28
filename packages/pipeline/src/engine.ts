@@ -354,7 +354,8 @@ export async function searchProgress(prisma: Db, searchId: string) {
   const runs = await prisma.searchSiteRun.findMany({ where: { searchId }, include: { site: true } });
   return {
     status: search?.status ?? 'missing',
-    done: search?.status === 'complete',
+    done: search?.status === 'complete' || search?.status === 'failed',
+    failed: search?.status === 'failed',
     runs: runs.map((run) => ({
       siteId: run.siteId,
       siteName: run.site.name,

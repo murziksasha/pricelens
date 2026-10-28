@@ -1,4 +1,4 @@
-import { runSearch } from '@pricelens/pipeline';
+import { drainQueuedSearches } from '@pricelens/pipeline';
 import { getLoader } from './loader';
 import { PrismaService } from './prisma.service';
 
@@ -38,19 +38,7 @@ export async function publishHealth(runId: string) {
   }
 }
 
+/** Drains queued searches in-process (used when no worker is running). */
 export async function drainSearches(prisma: PrismaService | import('@prisma/client').PrismaClient) {
-  const queued = await prisma.search.findMany({ where: { status: 'queued' }, take: 4 });
-  for (const search of queued) {
-    const claim = await prisma.search.updateMany({
-      where: { id: search.id, status: 'queued' },
-      data: { status: 'running' },
-    });
-    if (claim.count !== 1) continue;
-    try {
-      await runSearch(prisma as import('@prisma/client').PrismaClient, search.id, { load: getLoader() });
-    } catch (error) {
-      console.error(error);
-      await prisma.search.update({ where: { id: search.id }, data: { status: 'complete' } });
-    }
-  }
+  await drainQueuedSearches(prisma as import('@prisma/client').PrismaClient, getLoader());
 }
