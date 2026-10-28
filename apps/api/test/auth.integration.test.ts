@@ -148,6 +148,45 @@ describe.skipIf(!run)('API integration', () => {
     expect(second.body.runs[0].fromCache).toBe(true);
   });
 
+  it('locks down tokens, CORS, the LAN check and login limits', async () => {
+    resetLoginLimits();
+    const server = app.getHttpServer();
+    const admin = await request(server).post('/api/auth/login').send({ login: 'admin', password: 'test-password-123' });
+    expect(admin.headers['set-cookie']?.[0]).toMatch(/SameSite=Strict/i);
+    const viaQuery = await request(server).get(`/api/auth/me?access_token=${admin.body.token}`);
+    expect(viaQuery.status).toBe(401);
+
+    const evil = await request(server).get('/api/health').set('origin', 'http://evil.example');
+    expect(evil.headers['access-control-allow-origin']).toBeUndefined();
+    const desktop = await request(server).get('/health').set('origin', 'http://tauri.localhost');
+    expect(desktop.headers['access-control-allow-origin']).toBe('http://tauri.localhost');
+
+    process.env.LAN_ONLY = 'true';
+    try {
+      const spoofedPublic = await request(server).get('/health').set('x-forwarded-for', '8.8.8.8');
+      expect(spoofedPublic.status).toBe(403);
+      const lan = await request(server).get('/health').set('x-forwarded-for', '192.168.1.20');
+      expect(lan.status).toBe(200);
+    } finally {
+      process.env.LAN_ONLY = 'false';
+    }
+
+    for (let i = 0; i < 3; i += 1) {
+      await request(server).post('/api/auth/login').set('x-forwarded-for', '192.168.1.30').send({ login: 'admin', password: 'nope-nope' });
+    }
+    const blocked = await request(server)
+      .post('/api/auth/login')
+      .set('x-forwarded-for', '192.168.1.30')
+      .send({ login: 'admin', password: 'test-password-123' });
+    expect(blocked.status).toBe(429);
+    const otherMachine = await request(server)
+      .post('/api/auth/login')
+      .set('x-forwarded-for', '192.168.1.31')
+      .send({ login: 'admin', password: 'test-password-123' });
+    expect(otherMachine.status).toBe(201);
+    resetLoginLimits();
+  });
+
   it('hides a private note from the other user and keeps a manual merge', async () => {
     const admin = await request(app.getHttpServer()).post('/api/auth/login').send({ login: 'admin', password: 'test-password-123' });
     await request(app.getHttpServer())

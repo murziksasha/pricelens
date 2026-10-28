@@ -3,10 +3,11 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: pricelens
-      POSTGRES_PASSWORD: pricelens
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (copy .env.example to .env)}
       POSTGRES_DB: pricelens
+    # Only reachable from this computer (for db:studio); never published to the shop LAN.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,12 +22,14 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     environment:
-      DATABASE_URL: postgresql://pricelens:pricelens@postgres:5432/pricelens
+      DATABASE_URL: postgresql://pricelens:${POSTGRES_PASSWORD}@postgres:5432/pricelens
       ADMIN_LOGIN: admin
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (copy .env.example to .env)}
       PORT: 3000
       INLINE_SEARCH: "0"
       LAN_ONLY: "true"
+      # Extra browser origins allowed to call the API directly (the desktop app is always allowed).
+      WEB_ORIGIN: ${WEB_ORIGIN:-}
       BACKUP_DIR: /backups
       NODE_ENV: production
     ports:
@@ -44,7 +47,7 @@ services:
       context: .
       dockerfile: apps/worker/Dockerfile
     environment:
-      DATABASE_URL: postgresql://pricelens:pricelens@postgres:5432/pricelens
+      DATABASE_URL: postgresql://pricelens:${POSTGRES_PASSWORD}@postgres:5432/pricelens
       BACKUP_DIR: /backups
       BACKUP_AUTORUN: "1"
       HEALTH_AUTORUN: "0"

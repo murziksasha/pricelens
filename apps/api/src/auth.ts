@@ -29,9 +29,7 @@ function readToken(req: Request): string | null {
   const header = req.headers.authorization;
   if (typeof header === 'string' && header.toLowerCase().startsWith('bearer ')) return header.slice(7).trim();
   const cookie = (req as Request & { cookies?: Record<string, string> }).cookies?.pl_session;
-  if (cookie) return cookie;
-  const query = req.query?.access_token;
-  return typeof query === 'string' ? query : null;
+  return cookie || null;
 }
 
 @Injectable()
@@ -82,21 +80,36 @@ export class AdminGuard implements CanActivate {
   }
 }
 
-export function assertLoginAllowed(key: string) {
-  const row = fails.get(key);
-  const max = Number(process.env.LOGIN_MAX_FAILS ?? 10);
-  if (row && row.reset > Date.now() && row.count >= max) {
-    throw new HttpException({ error: 'rate_limited' }, 429);
+/** Rate-limit keys for one login attempt: the ip+login pair, and the ip alone (looser cap). */
+export function loginLimitKeys(ip: string | undefined, login: string) {
+  const address = (ip || 'local').replace('::ffff:', '');
+  return { pair: `${address}|${login.trim().toLowerCase()}`, ip: `ip:${address}` };
+}
+
+function limitFor(key: string) {
+  const pairMax = Number(process.env.LOGIN_MAX_FAILS ?? 10);
+  return key.startsWith('ip:') ? Number(process.env.LOGIN_MAX_FAILS_PER_IP ?? pairMax * 5) : pairMax;
+}
+
+export function assertLoginAllowed(...keys: string[]) {
+  for (const key of keys) {
+    const row = fails.get(key);
+    if (row && row.reset > Date.now() && row.count >= limitFor(key)) {
+      throw new HttpException({ error: 'rate_limited' }, 429);
+    }
   }
 }
 
-export function recordLoginFailure(key: string) {
-  const row = fails.get(key);
+export function recordLoginFailure(...keys: string[]) {
   const now = Date.now();
-  if (!row || row.reset < now) fails.set(key, { count: 1, reset: now + 15 * 60_000 });
-  else row.count += 1;
+  for (const key of keys) {
+    const row = fails.get(key);
+    if (!row || row.reset < now) fails.set(key, { count: 1, reset: now + 15 * 60_000 });
+    else row.count += 1;
+  }
 }
 
+/** On success only the pair is cleared; the per-IP counter keeps limiting password spraying. */
 export function clearLoginFailures(key: string) {
   fails.delete(key);
 }

@@ -53,9 +53,19 @@ import {
 } from '@pricelens/shared';
 import type { Request, Response } from 'express';
 import { interval, from, map, switchMap, takeWhile } from 'rxjs';
-import { AdminGuard, AuthUser, Public, assertLoginAllowed, clearLoginFailures, openSession, recordLoginFailure } from './auth';
+import {
+  AdminGuard,
+  AuthUser,
+  Public,
+  assertLoginAllowed,
+  clearLoginFailures,
+  loginLimitKeys,
+  openSession,
+  recordLoginFailure,
+} from './auth';
 import { getLoader } from './loader';
 import { PrismaService } from './prisma.service';
+import { sessionExpiry } from './session';
 
 function parse<T>(schema: { safeParse: (body: unknown) => { success: boolean; data?: T } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -84,16 +94,21 @@ export class AuthController {
   @Post('login')
   async login(@Body() body: unknown, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const input = parse(loginSchema, body);
-    const key = req.ip || 'local';
-    assertLoginAllowed(key);
+    const keys = loginLimitKeys(req.ip, input.login);
+    assertLoginAllowed(keys.pair, keys.ip);
     try {
       const session = await openSession(this.prisma, input.login, input.password);
-      clearLoginFailures(key);
-      res.cookie('pl_session', session.token, { httpOnly: true, sameSite: 'lax', path: '/' });
+      clearLoginFailures(keys.pair);
+      res.cookie('pl_session', session.token, {
+        httpOnly: true,
+        sameSite: 'strict',
+        path: '/',
+        maxAge: sessionExpiry().getTime() - Date.now(),
+      });
       return session;
     } catch (error) {
       if (error instanceof HttpException && (error.getResponse() as { error?: string }).error === 'invalid_credentials') {
-        recordLoginFailure(key);
+        recordLoginFailure(keys.pair, keys.ip);
       }
       throw error;
     }

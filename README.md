@@ -6,7 +6,13 @@ Self-hosted multi-site search for a small LAN team. Spec: `docs/`. Runbook: `doc
 
 1. Copy `.env.example` to `.env`.
 2. Set **`ADMIN_PASSWORD`** (required; the stack refuses to start with the default `changeme`) and **`POSTGRES_PASSWORD`**.
-3. Set `WEB_ORIGIN` to the address(es) colleagues open in the browser, e.g. `http://192.168.1.10:8080,http://localhost:8080`.
+3. Optional: `WEB_ORIGIN` lists extra browser origins that call the API on port 3000 directly
+   (the web UI on :8080 goes through nginx and the desktop app is always allowed).
+
+> **Existing install:** the `pgdata` volume keeps its old password (`pricelens`). Either set
+> `POSTGRES_PASSWORD=pricelens`, or first run
+> `docker compose exec postgres psql -U pricelens -c "ALTER USER pricelens PASSWORD 'new-password'"`
+> and then put the new password in `.env`.
 
 ```
 docker compose up --build
