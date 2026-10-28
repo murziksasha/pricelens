@@ -16,8 +16,13 @@ import {
   previewListings,
   readBackup,
   readSettings,
-  realisedMargin,
   recordPurchase,
+  addPurchaseItem,
+  auditPurchase,
+  getPurchase,
+  listPurchases,
+  removePurchaseItem,
+  updatePurchase,
   restoreBackup,
   runSearch,
   saveSelection,
@@ -36,6 +41,8 @@ import {
   markSchema,
   noteSchema,
   preferencesSchema,
+  purchaseItemSchema,
+  purchasePatchSchema,
   purchaseSchema,
   scheduleSchema,
   searchCreateSchema,
@@ -58,13 +65,6 @@ function parse<T>(schema: { safeParse: (body: unknown) => { success: boolean; da
 
 function userOf(req: Request): AuthUser {
   return (req as Request & { user: AuthUser }).user;
-}
-
-function num(value: unknown): number {
-  if (value == null) return 0;
-  if (typeof value === 'number') return value;
-  if (typeof value === 'object' && value && 'toNumber' in value) return (value as { toNumber: () => number }).toNumber();
-  return Number(value);
 }
 
 @Controller()
@@ -551,7 +551,10 @@ export class ListingController {
   async group(@Param('id') id: string) {
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: { listings: { include: { listing: { include: { site: true, prices: true } } } }, purchases: true },
+      include: {
+        listings: { include: { listing: { include: { site: true, prices: true } } } },
+        purchaseItems: { include: { purchase: true } },
+      },
     });
     if (!product) throw new HttpException({ error: 'not_found' }, 404);
     return product;
@@ -577,53 +580,55 @@ export class PurchaseController {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   @Post()
-  create(@Req() req: Request, @Body() body: unknown) {
+  async create(@Req() req: Request, @Body() body: unknown) {
     const input = parse(purchaseSchema, body);
-    return recordPurchase(this.prisma, userOf(req).id, input);
+    const purchase = await recordPurchase(this.prisma, userOf(req).id, input);
+    await auditPurchase(this.prisma, userOf(req).id, 'purchase.create', purchase.id);
+    return purchase;
   }
 
   @Get()
-  async list(@Query('buyer') buyer?: string) {
-    const rows = await this.prisma.purchase.findMany({
-      where: buyer ? { userId: buyer } : {},
-      include: { user: true },
-      orderBy: { purchasedAt: 'desc' },
-    });
-    const items = rows.map((row) => ({
-      id: row.id,
-      price: num(row.price),
-      currency: row.currency,
-      qty: row.qty,
-      purchasedAt: row.purchasedAt,
-      salePrice: row.salePrice == null ? null : num(row.salePrice),
-      soldAt: row.soldAt,
-      note: row.note,
-      snapshot: row.listingSnapshot,
-      buyer: row.user ? row.user.login : null,
-      userId: row.userId,
-      margin: realisedMargin(num(row.price), row.salePrice == null ? null : num(row.salePrice), row.qty),
-    }));
-    const total = items.reduce((sum, row) => sum + row.price * row.qty, 0);
-    return { items, total };
+  list(@Query('buyer') buyer?: string) {
+    return listPurchases(this.prisma, { buyer });
   }
 
+  @Get(':id')
+  one(@Param('id') id: string) {
+    return getPurchase(this.prisma, id);
+  }
+
+  /** salePrice is the TOTAL for the purchase; per-position and per-unit values are re-allocated. */
   @Patch(':id')
-  async patch(@Req() req: Request, @Param('id') id: string, @Body() body: { salePrice?: number | null; soldAt?: string | null; note?: string; price?: number }) {
+  async patch(@Req() req: Request, @Param('id') id: string, @Body() body: unknown) {
+    const input = parse(purchasePatchSchema, body);
+    await this.assertOwnerOrAdmin(req, id);
+    const purchase = await updatePurchase(this.prisma, id, input);
+    await auditPurchase(this.prisma, userOf(req).id, 'purchase.update', id);
+    return purchase;
+  }
+
+  @Post(':id/items')
+  async addItem(@Req() req: Request, @Param('id') id: string, @Body() body: unknown) {
+    const input = parse(purchaseItemSchema, body);
+    await this.assertOwnerOrAdmin(req, id);
+    const purchase = await addPurchaseItem(this.prisma, id, input);
+    await auditPurchase(this.prisma, userOf(req).id, 'purchase.item_add', id);
+    return purchase;
+  }
+
+  @Delete(':id/items/:itemId')
+  async removeItem(@Req() req: Request, @Param('id') id: string, @Param('itemId') itemId: string) {
+    await this.assertOwnerOrAdmin(req, id);
+    const purchase = await removePurchaseItem(this.prisma, id, itemId);
+    await auditPurchase(this.prisma, userOf(req).id, 'purchase.item_remove', id, { itemId });
+    return purchase;
+  }
+
+  private async assertOwnerOrAdmin(req: Request, id: string) {
     const me = userOf(req);
     const current = await this.prisma.purchase.findUnique({ where: { id } });
     if (!current) throw new HttpException({ error: 'not_found' }, 404);
     if (current.userId !== me.id && me.role !== 'admin') throw new HttpException({ error: 'forbidden' }, 403);
-    const purchase = await this.prisma.purchase.update({
-      where: { id },
-      data: {
-        salePrice: body.salePrice === undefined ? undefined : body.salePrice,
-        soldAt: body.soldAt === undefined ? undefined : body.soldAt ? new Date(body.soldAt) : null,
-        note: body.note,
-        price: body.price,
-      },
-    });
-    await audit(this.prisma, me.id, 'purchase.update', 'purchase', id);
-    return purchase;
   }
 }
 

@@ -3,6 +3,7 @@ import { PrismaClient } from '@pricelens/db';
 import { toUah } from '@pricelens/shared';
 import { readSettings } from '../engine';
 import { loadRates, refreshNbuRates } from '../fx';
+import { backfillPurchaseUah } from '../purchases';
 
 async function main() {
   const prisma = new PrismaClient();
@@ -31,6 +32,7 @@ async function main() {
     cursor = rows[rows.length - 1]!.id;
   }
   console.log(`price_uah backfill: updated ${updated}, skipped ${skipped} (no rate)`);
+  console.log('purchases backfill', await backfillPurchaseUah(prisma, rates));
   await prisma.$disconnect();
 }
 

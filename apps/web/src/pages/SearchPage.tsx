@@ -55,6 +55,16 @@ export function SearchPage() {
   const [filter, setFilter] = useState('');
   const [searching, setSearching] = useState(false);
   const [savingPurchase, setSavingPurchase] = useState(false);
+  const [recentPurchases, setRecentPurchases] = useState<Array<{ id: string; purchasedAt: string; items: Array<{ title: string }> }>>([]);
+  const [addTo, setAddTo] = useState('');
+
+  useEffect(() => {
+    if (!buy) return;
+    setAddTo('');
+    api<{ items: typeof recentPurchases }>('/api/purchases')
+      .then((data) => setRecentPurchases(data.items.slice(0, 10)))
+      .catch(() => setRecentPurchases([]));
+  }, [buy]);
 
   useEffect(() => {
     api<{ sites: SiteRow[]; groups: GroupRow[] }>('/api/me/sites').then((data) => {
@@ -306,16 +316,15 @@ export function SearchPage() {
             setSavingPurchase(true);
             try {
               const data = new FormData(event.currentTarget);
-              await api('/api/purchases', {
-                method: 'POST',
-                body: JSON.stringify({
-                  listingId: buy.listingId,
-                  price: Number(data.get('price')),
-                  qty: Number(data.get('qty') || 1),
-                  note: String(data.get('note') || ''),
-                  currency: buy.currency,
-                }),
-              });
+              const item = { listingId: buy.listingId, qty: Number(data.get('qty') || 1), unitPrice: Number(data.get('price')) };
+              if (addTo) {
+                await api(`/api/purchases/${addTo}/items`, { method: 'POST', body: JSON.stringify(item) });
+              } else {
+                await api('/api/purchases', {
+                  method: 'POST',
+                  body: JSON.stringify({ items: [item], note: String(data.get('note') || ''), currency: buy.currency }),
+                });
+              }
               if (note) {
                 await api(`/api/listings/${buy.listingId}/notes`, { method: 'POST', body: JSON.stringify({ body: note, shared: false }) });
               }
@@ -326,9 +335,20 @@ export function SearchPage() {
           }}
         >
           <strong>{t('purchase.formTitle')}</strong>
-          <label className="field">{t('purchase.price')}<input name="price" defaultValue={buy.price} /></label>
+          <label className="field">{t('purchase.unitPrice')}<input name="price" defaultValue={buy.price} /></label>
           <label className="field">{t('common.quantity')}<input name="qty" defaultValue={1} /></label>
           <label className="field">{t('common.note')}<input name="note" value={note} onChange={(event) => setNote(event.target.value)} /></label>
+          <label className="field">
+            {t('purchase.addTo')}
+            <select value={addTo} onChange={(event) => setAddTo(event.target.value)}>
+              <option value="">{t('purchase.newPurchase')}</option>
+              {recentPurchases.map((row) => (
+                <option key={row.id} value={row.id}>
+                  {`${row.purchasedAt.slice(0, 10)} · ${row.items.map((item) => item.title).join(', ').slice(0, 60)}`}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="row">
             <button className="primary" type="submit" disabled={savingPurchase}>{t('common.save')}</button>
             <button type="button" onClick={() => setBuy(null)}>{t('common.cancel')}</button>

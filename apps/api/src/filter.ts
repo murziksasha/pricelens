@@ -16,8 +16,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
       response.status(409).json({ error: 'conflict' });
       return;
     }
-    if (code === 'invalid_backup' || code === 'not_found') {
-      response.status(code === 'not_found' ? 404 : 400).json({ error: code });
+    if (code === 'not_found') {
+      response.status(404).json({ error: code });
+      return;
+    }
+    if (['invalid_backup', 'manual_exceeds_total', 'last_position', 'unsupported_format'].includes(code)) {
+      response.status(400).json({ error: code });
       return;
     }
     console.error(exception);

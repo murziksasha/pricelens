@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { realisedMargin } from '../src/engine';
+import { allocateSale } from '@pricelens/shared';
 
 describe('pipeline integration placeholder', () => {
-  it('computes a realised margin without a database', () => {
-    expect(realisedMargin(10000, 15000, 2)).toBe(10000);
+  it('splits a sale total without a database', () => {
+    expect(allocateSale(3_000_000, [{ id: 'a', qty: 2, unitBuyKop: 1_000_000 }])[0]!.saleUnitKop).toBe(1_500_000);
   });
 });

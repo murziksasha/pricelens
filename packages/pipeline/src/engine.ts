@@ -399,9 +399,10 @@ export async function searchRows(prisma: Db, searchId: string) {
       })
     : [];
   const purchases = productIds.length
-    ? await prisma.purchase.findMany({
+    ? await prisma.purchaseItem.findMany({
         where: { productGroupId: { in: productIds } },
-        orderBy: { purchasedAt: 'desc' },
+        include: { purchase: { select: { purchasedAt: true } } },
+        orderBy: { purchase: { purchasedAt: 'desc' } },
       })
     : [];
   return results.map((row) => {
@@ -466,9 +467,13 @@ export async function searchRows(prisma: Db, searchId: string) {
       newRange: range(fresh),
       usedRange: range(used),
       bought: last
-        ? { count: history.length, lastPrice: num(last.price), lastAt: last.purchasedAt.toISOString() }
+        ? {
+            count: history.reduce((sum, item) => sum + item.qty, 0),
+            lastPrice: num(last.unitPrice),
+            lastAt: last.purchase.purchasedAt.toISOString(),
+          }
         : null,
-      priceHint: last && listingUah != null ? num(last.price) - listingUah : null,
+      priceHint: last && listingUah != null ? num(last.unitPriceUah ?? last.unitPrice) - listingUah : null,
     };
   });
 }
@@ -586,6 +591,7 @@ export async function mergeGroups(prisma: Db, targetId: string, sourceId: string
   if (targetId === sourceId) return;
   await prisma.productListing.updateMany({ where: { productId: sourceId }, data: { productId: targetId, manual: true } });
   await prisma.purchase.updateMany({ where: { productGroupId: sourceId }, data: { productGroupId: targetId } });
+  await prisma.purchaseItem.updateMany({ where: { productGroupId: sourceId }, data: { productGroupId: targetId } });
   await prisma.product.update({ where: { id: targetId }, data: { manual: true } });
   await prisma.product.delete({ where: { id: sourceId } });
   await audit(prisma, actorId, 'group.merge', 'product', targetId, { sourceId });
@@ -613,55 +619,3 @@ export async function splitListings(prisma: Db, listingIds: string[], name: stri
   return product;
 }
 
-export async function recordPurchase(
-  prisma: Db,
-  userId: string,
-  input: {
-    listingId: string;
-    price: number;
-    currency: string;
-    qty: number;
-    purchasedAt?: string;
-    note?: string;
-    salePrice?: number | null;
-    soldAt?: string | null;
-  },
-) {
-  const listing = await prisma.listing.findUnique({
-    where: { id: input.listingId },
-    include: { grouped: true, site: true },
-  });
-  if (!listing) throw Object.assign(new Error('not_found'), { code: 'not_found' });
-  const purchase = await prisma.purchase.create({
-    data: {
-      listingId: listing.id,
-      productGroupId: listing.grouped?.productId ?? null,
-      userId,
-      price: input.price,
-      currency: input.currency,
-      qty: input.qty,
-      purchasedAt: input.purchasedAt ? new Date(input.purchasedAt) : new Date(),
-      note: input.note,
-      salePrice: input.salePrice ?? null,
-      soldAt: input.soldAt ? new Date(input.soldAt) : null,
-      listingSnapshot: {
-        title: listing.title,
-        specs: listing.specs,
-        site: listing.site.name,
-        url: listing.url,
-        imageUrl: listing.imageUrl,
-      },
-    },
-  });
-  await prisma.listingMark.upsert({
-    where: { listingId: listing.id },
-    create: { listingId: listing.id, status: 'bought', updatedBy: userId },
-    update: { status: 'bought', updatedBy: userId },
-  });
-  return purchase;
-}
-
-export function realisedMargin(price: number, salePrice: number | null, qty: number): number | null {
-  if (salePrice == null) return null;
-  return (salePrice - price) * qty;
-}

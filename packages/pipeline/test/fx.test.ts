@@ -7,7 +7,10 @@ describe.skipIf(!runIntegration)('currency conversion (integration)', () => {
   const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
   beforeAll(() => migrate());
   beforeEach(() => resetDb(prisma));
-  afterAll(() => prisma.$disconnect());
+  afterAll(async () => {
+    await resetDb(prisma);
+    await prisma.$disconnect();
+  });
 
   const nbu = (rate: number) =>
     (async () =>

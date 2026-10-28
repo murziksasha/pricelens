@@ -68,15 +68,60 @@ export const noteSchema = z.object({
   shared: z.boolean(),
 });
 
-export const purchaseSchema = z.object({
+export const purchaseItemSchema = z.object({
   listingId: z.string().uuid(),
-  price: z.number().nonnegative(),
-  currency: z.string().min(1).max(8).default('UAH'),
-  qty: z.number().int().positive().default(1),
-  purchasedAt: z.string().optional(),
-  note: z.string().max(2000).optional(),
-  salePrice: z.number().nonnegative().nullable().optional(),
+  qty: z.number().int().positive().max(1000).default(1),
+  unitPrice: z.number().nonnegative().max(100_000_000),
+});
+
+/** 1.2a: salePrice is the TOTAL for the whole purchase. Legacy single-listing body is still accepted. */
+export const purchaseSchema = z
+  .object({
+    currency: z.string().min(1).max(8).default('UAH'),
+    purchasedAt: z.string().optional(),
+    note: z.string().max(2000).optional(),
+    salePrice: z.number().nonnegative().max(100_000_000).nullable().optional(),
+    soldAt: z.string().nullable().optional(),
+    items: z.array(purchaseItemSchema).min(1).max(20).optional(),
+    listingId: z.string().uuid().optional(),
+    price: z.number().nonnegative().optional(),
+    qty: z.number().int().positive().max(1000).optional(),
+  })
+  .transform((input, ctx) => {
+    const items =
+      input.items ??
+      (input.listingId && input.price !== undefined
+        ? [{ listingId: input.listingId, qty: input.qty ?? 1, unitPrice: input.price }]
+        : null);
+    if (!items) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'items required' });
+      return z.NEVER;
+    }
+    return {
+      currency: input.currency,
+      purchasedAt: input.purchasedAt,
+      note: input.note,
+      salePrice: input.salePrice,
+      soldAt: input.soldAt,
+      items,
+    };
+  });
+
+export const purchasePatchSchema = z.object({
+  salePrice: z.number().nonnegative().max(100_000_000).nullable().optional(),
   soldAt: z.string().nullable().optional(),
+  note: z.string().max(2000).optional(),
+  items: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        qty: z.number().int().positive().max(1000).optional(),
+        unitPrice: z.number().nonnegative().max(100_000_000).optional(),
+        saleManual: z.number().nonnegative().max(100_000_000).nullable().optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 export const templateSchema = z.object({

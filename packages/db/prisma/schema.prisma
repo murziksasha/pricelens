@@ -283,6 +283,7 @@ model Listing {
   dupOrigin Duplicate[]      @relation("dup_original")
   grouped   ProductListing?
   purchases Purchase[]
+  purchaseItems PurchaseItem[]
 
   @@index([siteId, externalId])
   @@index([title])
@@ -313,6 +314,7 @@ model Product {
   manual             Boolean  @default(false)
   listings           ProductListing[]
   purchases          Purchase[]
+  purchaseItems      PurchaseItem[]
 
   @@map("products")
 }
@@ -389,27 +391,59 @@ model Duplicate {
   @@map("duplicates")
 }
 
+/// A purchase (one deal with a seller). salePrice is the TOTAL for the whole purchase;
+/// per-position and per-unit sale prices live on PurchaseItem (see packages/shared/src/sale-allocation.ts).
 model Purchase {
   id             String    @id @default(uuid()) @db.Uuid
-  listingId      String?   @map("listing_id") @db.Uuid
-  productGroupId String?   @map("product_group_id") @db.Uuid
   userId         String?   @map("user_id") @db.Uuid
-  price          Decimal   @db.Decimal(14, 2)
   currency       String
-  qty            Int       @default(1)
   purchasedAt    DateTime  @map("purchased_at")
   salePrice      Decimal?  @map("sale_price") @db.Decimal(14, 2)
+  salePriceUah   Decimal?  @map("sale_price_uah") @db.Decimal(14, 2)
   soldAt         DateTime? @map("sold_at")
   note           String?
-  listingSnapshot Json     @map("listing_snapshot")
   createdAt      DateTime  @default(now()) @map("created_at")
-  listing        Listing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
-  product        Product?  @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
   user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items          PurchaseItem[]
+
+  /// Legacy single-position columns (before purchase_items). Read-only; drop in a later release.
+  listingId       String?  @map("listing_id") @db.Uuid
+  productGroupId  String?  @map("product_group_id") @db.Uuid
+  price           Decimal? @db.Decimal(14, 2)
+  qty             Int?     @default(1)
+  listingSnapshot Json?    @map("listing_snapshot")
+  listing         Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  product         Product? @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
 
   @@index([productGroupId])
   @@index([purchasedAt])
+  @@index([soldAt])
   @@map("purchases")
+}
+
+/// One position of a purchase: qty units of one listing/product at unitPrice each.
+model PurchaseItem {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseId      String   @map("purchase_id") @db.Uuid
+  listingId       String?  @map("listing_id") @db.Uuid
+  productGroupId  String?  @map("product_group_id") @db.Uuid
+  position        Int      @default(0)
+  qty             Int      @default(1)
+  unitPrice       Decimal  @map("unit_price") @db.Decimal(14, 2)
+  unitPriceUah    Decimal? @map("unit_price_uah") @db.Decimal(14, 2)
+  saleManual      Decimal? @map("sale_manual") @db.Decimal(14, 2)
+  saleTotal       Decimal? @map("sale_total") @db.Decimal(14, 2)
+  saleUnit        Decimal? @map("sale_unit") @db.Decimal(14, 2)
+  saleUnitUah     Decimal? @map("sale_unit_uah") @db.Decimal(14, 2)
+  allocMethod     String?  @map("alloc_method")
+  listingSnapshot Json     @map("listing_snapshot")
+  purchase        Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  listing         Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  product         Product? @relation(fields: [productGroupId], references: [id], onDelete: SetNull)
+
+  @@index([productGroupId])
+  @@index([purchaseId])
+  @@map("purchase_items")
 }
 
 model Notification {
