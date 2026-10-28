@@ -402,6 +402,7 @@ export async function searchRows(prisma: Db, searchId: string) {
   const minOwnSales = Number(settings.min_own_sales ?? 2);
   const askingToSaleRatio = Number(settings.asking_to_sale_ratio ?? 1);
   const useAllocated = settings.own_sales_use_allocated !== false && settings.own_sales_use_allocated !== 'false';
+  const negotiateAfter = Number(settings.negotiate_after_days ?? 21);
   const uah = (l: { priceUah: unknown; price: unknown; currency: string }): number | null =>
     l.priceUah != null ? num(l.priceUah) : toUah(num(l.price), l.currency, rates);
   const results = await prisma.searchResult.findMany({
@@ -501,10 +502,18 @@ export async function searchRows(prisma: Db, searchId: string) {
       expected != null && listingUah != null
         ? expectedProfit({ expectedSalePrice: expected, listingPrice: listingUah, costs })
         : null;
+    const margin = product?.minMargin != null ? num(product.minMargin) : defaultMargin;
+    // 5.5: the most you can pay and still make the target margin after costs.
+    const buyBelow = expected != null ? Math.floor(expected - costs - margin) : null;
     const history = purchases.filter((purchase) => purchase.productGroupId === product?.id);
     const last = history[0];
     const visit = listing.visits[0];
     const previous = listing.prices[1];
+    const priceDropped = Boolean(previous && num(listing.prices[0]?.price) < num(previous.price));
+    // 5.4: days on market, from the site's posting date when known, else when we first saw it.
+    const listedSince = listing.postedAt ?? listing.firstSeenAt;
+    const daysListed = Math.max(0, Math.floor((Date.now() - listedSince.getTime()) / 86_400_000));
+    const negotiable = daysListed >= negotiateAfter;
     return {
       listingId: listing.id,
       title: listing.title,
@@ -524,13 +533,17 @@ export async function searchRows(prisma: Db, searchId: string) {
       mark: listing.mark?.status ?? null,
       tags: listing.mark?.tags ?? [],
       duplicateOf: listing.dupOf?.originalListingId ?? null,
-      priceDropped: Boolean(previous && num(listing.prices[0]?.price) < num(previous.price)),
+      priceDropped,
+      priceDrop: priceDropped ? num(previous!.price) - num(listing.prices[0]!.price) : null,
+      daysListed,
+      sellerHint: priceDropped && negotiable ? 'motivated' : negotiable ? 'negotiable' : null,
       deal,
       profit,
       expectedSale: expected,
       expectedSource: sale.source,
       expectedSamples: sale.samples,
-      margin: product?.minMargin != null ? num(product.minMargin) : defaultMargin,
+      margin,
+      buyBelow,
       groupId: product?.id ?? null,
       groupName: product?.normalizedName ?? null,
       groupConfidence: product?.confidence ?? null,

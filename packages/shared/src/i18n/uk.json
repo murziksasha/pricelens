@@ -333,5 +333,9 @@
   "results.defect.missing_part": "Бракує деталі",
   "results.defect.locked": "Заблоковано / пароль",
   "results.defect.liquid": "Після залиття",
-  "purchase.daysToSell": "(продано за {count} дн.)"
+  "purchase.daysToSell": "(продано за {count} дн.)",
+  "results.buyBelow": "Купувати ≤ {amount} грн",
+  "results.daysListed": "{count} дн. в продажу",
+  "results.sellerHint.negotiable": "Продавець може поступитися",
+  "results.sellerHint.motivated": "Продавець хоче швидко продати"
 }

@@ -333,5 +333,9 @@
   "results.defect.missing_part": "Не хватает детали",
   "results.defect.locked": "Заблокирован / пароль",
   "results.defect.liquid": "После залития",
-  "purchase.daysToSell": "(продано за {count} дн.)"
+  "purchase.daysToSell": "(продано за {count} дн.)",
+  "results.buyBelow": "Покупать ≤ {amount} грн",
+  "results.daysListed": "{count} дн. в продаже",
+  "results.sellerHint.negotiable": "Продавец может уступить",
+  "results.sellerHint.motivated": "Продавец хочет быстро продать"
 }

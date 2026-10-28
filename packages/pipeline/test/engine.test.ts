@@ -60,6 +60,10 @@ describe.skipIf(!runIntegration)('search engine (integration)', () => {
     expect(usd.deal.median).toBe(13500);
     expect(usd.deal.label).toBe('deal');
     expect(usd.expectedSource).toBe('asking_median');
+    // 5.5: expected sale 13 500 − costs 0 − default margin 1 500
+    expect(usd.buyBelow).toBe(12000);
+    expect(usd.daysListed).toBe(0);
+    expect(usd.sellerHint).toBeNull();
     expect((await searchProgress(prisma, id)).done).toBe(true);
   });
 

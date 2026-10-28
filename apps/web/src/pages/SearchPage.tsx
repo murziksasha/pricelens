@@ -20,6 +20,10 @@ interface ResultRow {
   mark: string | null;
   duplicateOf: string | null;
   priceDropped: boolean;
+  priceDrop: number | null;
+  daysListed: number;
+  sellerHint: 'negotiable' | 'motivated' | null;
+  buyBelow: number | null;
   deal: { label: string; score: number | null };
   profit: number | null;
   expectedSource: 'manual' | 'own_sales' | 'asking_median' | 'none';
@@ -267,7 +271,14 @@ export function SearchPage() {
                         {row.visited && <span className="badge">{t('results.openedBy', { user: row.visited.login || t('users.deletedAccount'), date: row.visited.visitedAt.slice(0, 10) })}</span>}
                         {row.duplicateOf && <span className="badge">{t('results.duplicate')}</span>}
                         {row.defects?.map((tag) => <span key={tag} className="badge bad">{t(`results.defect.${tag}`)}</span>)}
-                        {row.priceDropped && <span className="badge warn">{t('results.priceDrop')}</span>}
+                        {row.priceDropped && (
+                          <span className="badge warn">
+                            {t('results.priceDrop')}
+                            {row.priceDrop != null && ` −${Math.round(row.priceDrop)}`}
+                          </span>
+                        )}
+                        <span className="muted"> {t('results.daysListed', { count: row.daysListed })}</span>
+                        {row.sellerHint && <span className="badge deal">{t(`results.sellerHint.${row.sellerHint}`)}</span>}
                         {row.bought && <span className="badge">{t('purchase.badge', { count: row.bought.count, price: row.bought.lastPrice, date: row.bought.lastAt.slice(0, 10) })}</span>}
                         {row.priceHint != null && row.priceHint > 0 && <span className="badge deal">{t('purchase.cheaper', { amount: Math.round(row.priceHint) })}</span>}
                         {row.groupName && <span className="muted"> {row.groupName}</span>}
@@ -292,6 +303,11 @@ export function SearchPage() {
                         <span className={`badge ${row.deal.label === 'deal' ? 'deal' : row.deal.label === 'yellow' ? 'warn' : ''}`}>
                           {row.deal.label === 'insufficient' ? t('results.insufficient') : `${Math.round((row.deal.score || 0) * 100)}%`}
                         </span>
+                        {row.buyBelow != null && (
+                          <span className={`badge ${row.priceUah != null && row.priceUah <= row.buyBelow ? 'deal' : ''}`}>
+                            {t('results.buyBelow', { amount: row.buyBelow })}
+                          </span>
+                        )}
                         {row.profit != null && (
                           <span className="muted">
                             {' '}

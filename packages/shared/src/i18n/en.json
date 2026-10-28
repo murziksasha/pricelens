@@ -333,5 +333,9 @@
   "results.defect.missing_part": "Missing part",
   "results.defect.locked": "Locked / password",
   "results.defect.liquid": "Liquid damage",
-  "purchase.daysToSell": "({count} d to sell)"
+  "purchase.daysToSell": "({count} d to sell)",
+  "results.buyBelow": "Buy ≤ {amount} UAH",
+  "results.daysListed": "{count} d listed",
+  "results.sellerHint.negotiable": "Seller may negotiate",
+  "results.sellerHint.motivated": "Motivated seller"
 }
