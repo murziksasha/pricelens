@@ -146,9 +146,8 @@ export async function attachGroup(prisma: Db, listingId: string) {
 }
 
 /** FR-VIS-003. Prices are compared in UAH so a $400 ad and a 16 400 грн ad can match. */
-async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, draft: ListingDraft, price: number | null) {
-  const listing = await prisma.listing.findUnique({ where: { id: listingId } });
-  if (!listing) return;
+async function rememberDuplicate(prisma: Db, listing: ListingRow, siteId: string, draft: ListingDraft, price: number | null) {
+  const listingId = listing.id;
   const sameExternal = draft.externalId
     ? await prisma.listing.findFirst({
         where: { siteId, externalId: draft.externalId, NOT: { id: listingId } },
@@ -194,11 +193,21 @@ async function rememberDuplicate(prisma: Db, listingId: string, siteId: string, 
   }
 }
 
-async function upsertDraft(prisma: Db, siteId: string, draft: ListingDraft, fallbackCondition: string, rates: Rates) {
+type ListingRow = NonNullable<Awaited<ReturnType<Db['listing']['findUnique']>>>;
+
+async function upsertDraft(
+  prisma: Db,
+  siteId: string,
+  draft: ListingDraft,
+  fallbackCondition: string,
+  rates: Rates,
+  known?: Map<string, ListingRow>,
+) {
   const price = draft.price ?? 0;
   const currency = draft.currency ?? 'UAH';
   const priceUah = toUah(price, currency, rates);
-  const existing = await prisma.listing.findUnique({ where: { url: draft.url } });
+  // `known` is the page's existing listings, fetched in one query by runSearch.
+  const existing = known ? (known.get(draft.url) ?? null) : await prisma.listing.findUnique({ where: { url: draft.url } });
   const data = {
     siteId,
     title: draft.title,
@@ -231,8 +240,14 @@ async function upsertDraft(prisma: Db, siteId: string, draft: ListingDraft, fall
   if (!existing || changed) {
     await prisma.listingPrice.create({ data: { listingId: listing.id, price } });
   }
-  await rememberDuplicate(prisma, listing.id, siteId, draft, priceUah);
-  await attachGroup(prisma, listing.id);
+  // An already known listing with the same title, description and price cannot change its duplicate
+  // status or group (duplicate checks are symmetric and run when the other listing arrives).
+  const unchanged =
+    existing && !changed && existing.title === draft.title && (existing.description ?? null) === (draft.description ?? null);
+  if (!unchanged) {
+    await rememberDuplicate(prisma, listing, siteId, draft, priceUah);
+    await attachGroup(prisma, listing.id);
+  }
   return { listing, changed: Boolean(existing && changed), isNew: !existing };
 }
 
@@ -304,9 +319,13 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
         }
         drafts = applyFilters(drafts, filters);
         const ids: string[] = [];
+        const started = Date.now();
+        const known = new Map(
+          (await prisma.listing.findMany({ where: { url: { in: drafts.map((draft) => draft.url) } } })).map((row) => [row.url, row]),
+        );
         for (const draft of drafts) {
           if (draft.price == null) continue;
-          const saved = await upsertDraft(prisma, site.id, draft, site.defaultCondition, rates);
+          const saved = await upsertDraft(prisma, site.id, draft, site.defaultCondition, rates, known);
           ids.push(saved.listing.id);
         }
         await prisma.searchCache.upsert({
@@ -315,6 +334,7 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
           update: { fetchedAt: now, listingIds: ids },
         });
         await linkResults(prisma, searchId, ids);
+        if (process.env.PIPELINE_TIMING === '1') console.info(`site ${site.key}: ${ids.length} listings in ${Date.now() - started} ms`);
         await prisma.searchSiteRun.update({
           where: { id: run.id },
           data: { status: 'complete', resultCount: ids.length, finishedAt: new Date() },
@@ -338,15 +358,12 @@ export async function runSearch(prisma: Db, searchId: string, deps: { load: Load
 }
 
 async function linkResults(prisma: Db, searchId: string, listingIds: string[]) {
-  let rank = await prisma.searchResult.count({ where: { searchId } });
-  for (const listingId of listingIds) {
-    rank += 1;
-    await prisma.searchResult.upsert({
-      where: { searchId_listingId: { searchId, listingId } },
-      create: { searchId, listingId, rank },
-      update: {},
-    });
-  }
+  const rank = await prisma.searchResult.count({ where: { searchId } });
+  const unique = [...new Set(listingIds)];
+  await prisma.searchResult.createMany({
+    data: unique.map((listingId, index) => ({ searchId, listingId, rank: rank + index + 1 })),
+    skipDuplicates: true,
+  });
 }
 
 export async function searchProgress(prisma: Db, searchId: string) {
