@@ -314,5 +314,13 @@
   "errors.manual_exceeds_total": "Ручные суммы больше суммы продажи",
   "errors.last_position": "В покупке должна быть хотя бы одна позиция",
   "errors.not_found": "Не найдено",
-  "errors.validation_error": "Проверьте форму"
+  "errors.validation_error": "Проверьте форму",
+  "results.saleSource.manual": "ручная цена продажи",
+  "results.saleSource.own_sales": "по вашим продажам ({count} шт.)",
+  "results.saleSource.asking_median": "по ценам рынка",
+  "results.saleSource.none": "нет данных",
+  "settings.askingToSale": "Коэффициент продажа ÷ цена объявлений",
+  "settings.saleLookback": "Свои продажи: за сколько дней",
+  "settings.minOwnSales": "Свои продажи: минимум штук",
+  "settings.useAllocated": "Учитывать распределённые цены из смешанных лотов"
 }

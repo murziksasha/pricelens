@@ -314,5 +314,13 @@
   "errors.manual_exceeds_total": "Manual amounts exceed the sale total",
   "errors.last_position": "A purchase needs at least one position",
   "errors.not_found": "Not found",
-  "errors.validation_error": "Check the form"
+  "errors.validation_error": "Check the form",
+  "results.saleSource.manual": "manual sale price",
+  "results.saleSource.own_sales": "by your sales ({count} units)",
+  "results.saleSource.asking_median": "by market asking prices",
+  "results.saleSource.none": "no data",
+  "settings.askingToSale": "Sale price ÷ asking price ratio",
+  "settings.saleLookback": "Own sales: look back (days)",
+  "settings.minOwnSales": "Own sales: minimum units",
+  "settings.useAllocated": "Use split prices from mixed lots"
 }

@@ -65,3 +65,30 @@ export function expectedProfit(input: {
 }
 
 export const DEFAULT_MIN_MARGIN_UAH = 1500;
+
+export type SaleSource = 'manual' | 'own_sales' | 'asking_median' | 'none';
+
+/**
+ * FR-CMP-006 expected sale price, in order of trust:
+ * 1. manual price set on the product group
+ * 2. unit-weighted median of your own realised per-unit sale prices (>= minOwnSales units)
+ * 3. median asking price of comparable used listings x askingToSaleRatio
+ */
+export function expectedSalePrice(input: {
+  manual: number | null;
+  ownMedian: number | null;
+  unitsSold: number;
+  askingMedian: number | null;
+  askingToSaleRatio: number;
+  minOwnSales?: number;
+}): { value: number | null; source: SaleSource; samples: number } {
+  if (input.manual != null && input.manual > 0) return { value: input.manual, source: 'manual', samples: 0 };
+  if (input.ownMedian != null && input.ownMedian > 0 && input.unitsSold >= (input.minOwnSales ?? 2)) {
+    return { value: input.ownMedian, source: 'own_sales', samples: input.unitsSold };
+  }
+  if (input.askingMedian != null && input.askingMedian > 0) {
+    const ratio = Number.isFinite(input.askingToSaleRatio) && input.askingToSaleRatio > 0 ? input.askingToSaleRatio : 1;
+    return { value: Math.round(input.askingMedian * ratio), source: 'asking_median', samples: 0 };
+  }
+  return { value: null, source: 'none', samples: 0 };
+}

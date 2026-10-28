@@ -11,6 +11,8 @@ import {
   displayGroupName,
   duplicateDecision,
   expectedProfit,
+  expectedSalePrice,
+  weightedMedian,
   extractLaptopSpecs,
   groupKeyFromSpecs,
   scheduleDue,
@@ -371,6 +373,10 @@ export async function searchRows(prisma: Db, searchId: string) {
   const costs = Number(settings.cost_delivery ?? 0) + Number(settings.cost_repair ?? 0);
   const since = new Date(Date.now() - 30 * 86_400_000);
   const rates = await loadRates(prisma, settings);
+  const lookbackDays = Number(settings.sale_lookback_days ?? 180);
+  const minOwnSales = Number(settings.min_own_sales ?? 2);
+  const askingToSaleRatio = Number(settings.asking_to_sale_ratio ?? 1);
+  const useAllocated = settings.own_sales_use_allocated !== false && settings.own_sales_use_allocated !== 'false';
   const uah = (l: { priceUah: unknown; price: unknown; currency: string }): number | null =>
     l.priceUah != null ? num(l.priceUah) : toUah(num(l.price), l.currency, rates);
   const results = await prisma.searchResult.findMany({
@@ -405,6 +411,18 @@ export async function searchRows(prisma: Db, searchId: string) {
         orderBy: { purchase: { purchasedAt: 'desc' } },
       })
     : [];
+  // 1.2a: own realised per-unit sale prices (UAH), each unit counted once.
+  const soldItems = productIds.length
+    ? await prisma.purchaseItem.findMany({
+        where: {
+          productGroupId: { in: productIds },
+          saleUnitUah: { not: null },
+          purchase: { soldAt: { gte: new Date(Date.now() - lookbackDays * 86_400_000) } },
+          ...(useAllocated ? {} : { allocMethod: { in: ['single', 'manual'] } }),
+        },
+        select: { productGroupId: true, qty: true, saleUnitUah: true },
+      })
+    : [];
   return results.map((row) => {
     const listing = row.listing;
     const product = listing.grouped?.product ?? null;
@@ -429,7 +447,20 @@ export async function searchRows(prisma: Db, searchId: string) {
       listingUah == null
         ? ({ score: null, label: 'insufficient', median: null, samples: used.length } as const)
         : dealScore(listingUah, used, { green, yellow });
-    const expected = product?.expectedSalePrice != null ? num(product.expectedSalePrice) : deal.median;
+    const points = product
+      ? soldItems
+          .filter((item) => item.productGroupId === product.id)
+          .map((item) => ({ value: num(item.saleUnitUah), weight: item.qty }))
+      : [];
+    const sale = expectedSalePrice({
+      manual: product?.expectedSalePrice != null ? num(product.expectedSalePrice) : null,
+      ownMedian: weightedMedian(points),
+      unitsSold: points.reduce((sum, point) => sum + point.weight, 0),
+      askingMedian: deal.median,
+      askingToSaleRatio,
+      minOwnSales,
+    });
+    const expected = sale.value;
     const profit =
       expected != null && listingUah != null
         ? expectedProfit({ expectedSalePrice: expected, listingPrice: listingUah, costs })
@@ -460,6 +491,9 @@ export async function searchRows(prisma: Db, searchId: string) {
       priceDropped: Boolean(previous && num(listing.prices[0]?.price) < num(previous.price)),
       deal,
       profit,
+      expectedSale: expected,
+      expectedSource: sale.source,
+      expectedSamples: sale.samples,
       margin: product?.minMargin != null ? num(product.minMargin) : defaultMargin,
       groupId: product?.id ?? null,
       groupName: product?.normalizedName ?? null,

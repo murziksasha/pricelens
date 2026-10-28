@@ -22,6 +22,8 @@ interface ResultRow {
   priceDropped: boolean;
   deal: { label: string; score: number | null };
   profit: number | null;
+  expectedSource: 'manual' | 'own_sales' | 'asking_median' | 'none';
+  expectedSamples: number;
   groupName: string | null;
   groupId: string | null;
   newRange: { min: number; max: number } | null;
@@ -275,7 +277,13 @@ export function SearchPage() {
                         <span className={`badge ${row.deal.label === 'deal' ? 'deal' : row.deal.label === 'yellow' ? 'warn' : ''}`}>
                           {row.deal.label === 'insufficient' ? t('results.insufficient') : `${Math.round((row.deal.score || 0) * 100)}%`}
                         </span>
-                        {row.profit != null && <span className="muted"> {t('results.profit')} {Math.round(row.profit)}</span>}
+                        {row.profit != null && (
+                          <span className="muted">
+                            {' '}
+                            {t('results.profit')} {Math.round(row.profit)}{' '}
+                            <span className="badge">{t(`results.saleSource.${row.expectedSource}`, { count: row.expectedSamples })}</span>
+                          </span>
+                        )}
                       </td>
                     )}
                   </tr>

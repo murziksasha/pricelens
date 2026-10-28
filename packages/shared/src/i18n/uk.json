@@ -314,5 +314,13 @@
   "errors.manual_exceeds_total": "Ручні суми більші за суму продажу",
   "errors.last_position": "У покупці має бути хоча б одна позиція",
   "errors.not_found": "Не знайдено",
-  "errors.validation_error": "Перевірте форму"
+  "errors.validation_error": "Перевірте форму",
+  "results.saleSource.manual": "ручна ціна продажу",
+  "results.saleSource.own_sales": "за вашими продажами ({count} шт.)",
+  "results.saleSource.asking_median": "за цінами ринку",
+  "results.saleSource.none": "немає даних",
+  "settings.askingToSale": "Коефіцієнт продаж ÷ ціна оголошень",
+  "settings.saleLookback": "Власні продажі: за скільки днів",
+  "settings.minOwnSales": "Власні продажі: мінімум штук",
+  "settings.useAllocated": "Враховувати розподілені ціни зі змішаних лотів"
 }

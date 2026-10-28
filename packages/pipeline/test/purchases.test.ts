@@ -1,6 +1,6 @@
 import { PrismaClient } from '@pricelens/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { addPurchaseItem, listPurchases, recordPurchase, removePurchaseItem, updatePurchase } from '../src';
+import { addPurchaseItem, attachGroup, listPurchases, recordPurchase, removePurchaseItem, searchRows, updatePurchase } from '../src';
 import { dbUrl, makeListing, makeSite, makeUser, migrate, resetDb, runIntegration } from './helpers';
 
 describe.skipIf(!runIntegration)('purchases with positions (integration)', () => {
@@ -77,5 +77,27 @@ describe.skipIf(!runIntegration)('purchases with positions (integration)', () =>
     await expect(removePurchaseItem(prisma, created.id, removed.items[0]!.id)).rejects.toMatchObject({ code: 'last_position' });
     const list = await listPurchases(prisma, {});
     expect(list.total).toBe(16000);
+  });
+
+  it('feeds per-unit sale prices into the expected sale price of the group', async () => {
+    const { user, t480 } = await lot();
+    const site = await prisma.site.findFirstOrThrow();
+    const title = 'Lenovo ThinkPad T480 i5-8350U 8/256';
+    const peers = [];
+    for (const price of [9000, 9500, 10000]) peers.push(await makeListing(prisma, site.id, { title, price }));
+    for (const l of [t480, ...peers]) await attachGroup(prisma, l.id);
+    await recordPurchase(prisma, user.id, {
+      currency: 'UAH',
+      salePrice: 26000,
+      soldAt: new Date().toISOString(),
+      items: [{ listingId: t480.id, qty: 2, unitPrice: 8000 }],
+    });
+    const search = await prisma.search.create({ data: { userId: user.id, query: 't480', filters: {}, siteIds: [site.id], status: 'complete' } });
+    await prisma.searchResult.create({ data: { searchId: search.id, listingId: peers[0]!.id, rank: 1 } });
+    const [row] = await searchRows(prisma, search.id);
+    expect(row!.expectedSource).toBe('own_sales');
+    expect(row!.expectedSamples).toBe(2);
+    expect(row!.expectedSale).toBe(13000);
+    expect(row!.profit).toBe(4000);
   });
 });

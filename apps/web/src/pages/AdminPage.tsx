@@ -642,7 +642,7 @@ function Settings() {
             key.includes('from')
           )
             body[key] = value;
-          if (key === 'email_enabled') body[key] = value === 'true';
+          if (key === 'email_enabled' || key === 'own_sales_use_allocated') body[key] = value === 'true';
         }
         try {
           await api('/api/admin/settings', { method: 'PUT', body: JSON.stringify(body) });
@@ -688,6 +688,28 @@ function Settings() {
           value={form.cost_repair || ''}
           onChange={(event) => setForm({ ...form, cost_repair: event.target.value })}
         />
+      </label>
+      <label className="field">
+        {t('settings.askingToSale')}
+        <input value={form.asking_to_sale_ratio || ''} onChange={(event) => setForm({ ...form, asking_to_sale_ratio: event.target.value })} />
+      </label>
+      <label className="field">
+        {t('settings.saleLookback')}
+        <input value={form.sale_lookback_days || ''} onChange={(event) => setForm({ ...form, sale_lookback_days: event.target.value })} />
+      </label>
+      <label className="field">
+        {t('settings.minOwnSales')}
+        <input value={form.min_own_sales || ''} onChange={(event) => setForm({ ...form, min_own_sales: event.target.value })} />
+      </label>
+      <label className="field">
+        {t('settings.useAllocated')}
+        <select
+          value={form.own_sales_use_allocated === 'false' ? 'false' : 'true'}
+          onChange={(event) => setForm({ ...form, own_sales_use_allocated: event.target.value })}
+        >
+          <option value="true">{t('common.yes')}</option>
+          <option value="false">{t('common.no')}</option>
+        </select>
       </label>
       <label className="field">
         {t('settings.fxMode')}
