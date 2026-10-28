@@ -8,6 +8,22 @@ export function median(values: number[]): number {
   return (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
+/** Tukey fences: drop values outside [Q1 - 1.5*IQR, Q3 + 1.5*IQR] when n >= 5, then take the median. */
+export function robustMedian(values: number[]): { median: number; kept: number } {
+  const v = values.filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+  if (v.length < 5) return { median: median(v), kept: v.length };
+  const q = (p: number) => {
+    const i = (v.length - 1) * p;
+    const lo = Math.floor(i);
+    return v[lo]! + (v[Math.ceil(i)]! - v[lo]!) * (i - lo);
+  };
+  const q1 = q(0.25);
+  const q3 = q(0.75);
+  const iqr = q3 - q1;
+  const kept = v.filter((n) => n >= q1 - 1.5 * iqr && n <= q3 + 1.5 * iqr);
+  return { median: median(kept), kept: kept.length };
+}
+
 export type DealLabel = 'insufficient' | 'deal' | 'yellow' | 'neutral';
 
 export interface DealScore {
@@ -17,7 +33,7 @@ export interface DealScore {
   samples: number;
 }
 
-/** score = (medianUsed - price) / median. Needs >= 3 samples. */
+/** score = (robust median of used prices - price) / median. Needs >= 3 samples after outlier trimming. */
 export function dealScore(
   price: number,
   samples: number[],
@@ -25,19 +41,19 @@ export function dealScore(
 ): DealScore {
   const green = thresholds.green ?? 0.2;
   const yellow = thresholds.yellow ?? 0.1;
-  const usable = samples.filter((n) => Number.isFinite(n) && n > 0);
-  if (usable.length < 3 || !Number.isFinite(price)) {
-    return { score: null, label: 'insufficient', median: null, samples: usable.length };
+  const robust = robustMedian(samples);
+  if (robust.kept < 3 || !Number.isFinite(price)) {
+    return { score: null, label: 'insufficient', median: null, samples: robust.kept };
   }
-  const med = median(usable);
+  const med = robust.median;
   if (!Number.isFinite(med) || med <= 0) {
-    return { score: null, label: 'insufficient', median: null, samples: usable.length };
+    return { score: null, label: 'insufficient', median: null, samples: robust.kept };
   }
   const score = (med - price) / med;
   let label: DealLabel = 'neutral';
   if (score >= green) label = 'deal';
   else if (score >= yellow) label = 'yellow';
-  return { score, label, median: med, samples: usable.length };
+  return { score, label, median: med, samples: robust.kept };
 }
 
 export function expectedProfit(input: {

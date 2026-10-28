@@ -380,7 +380,10 @@ export async function searchRows(prisma: Db, searchId: string) {
     ...new Set(results.map((row) => row.listing.grouped?.productId).filter((id): id is string => Boolean(id))),
   ];
   const members = productIds.length
-    ? await prisma.productListing.findMany({ where: { productId: { in: productIds } }, include: { listing: true } })
+    ? await prisma.productListing.findMany({
+        where: { productId: { in: productIds } },
+        include: { listing: { include: { dupOf: true } } },
+      })
     : [];
   const purchases = productIds.length
     ? await prisma.purchase.findMany({
@@ -392,8 +395,15 @@ export async function searchRows(prisma: Db, searchId: string) {
     const listing = row.listing;
     const product = listing.grouped?.product ?? null;
     const groupMembers = product ? members.filter((member) => member.productId === product.id) : [];
+    // Comparable used units only: not this listing, not a repost, recently seen.
     const used = groupMembers
-      .filter((member) => member.listing.condition === 'used' && member.listing.lastSeenAt >= since)
+      .filter(
+        (member) =>
+          member.listingId !== listing.id &&
+          !member.listing.dupOf &&
+          member.listing.condition === 'used' &&
+          member.listing.lastSeenAt >= since,
+      )
       .map((member) => num(member.listing.price));
     const fresh = groupMembers.filter((member) => member.listing.condition === 'new').map((member) => num(member.listing.price));
     const deal = dealScore(num(listing.price), used, { green, yellow });
