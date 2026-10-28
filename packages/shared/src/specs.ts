@@ -14,11 +14,11 @@ export interface LaptopSpecs {
 const BRAND_RULES: Array<{ re: RegExp; name: string }> = [
   { re: /\bmac\s?book\b/i, name: 'Apple' },
   { re: /\bapple\b/i, name: 'Apple' },
-  { re: /\bthinkpad\b|\blenovo\b|\bideapad\b/i, name: 'Lenovo' },
-  { re: /\blatitude\b|\binspiron\b|\bxps\b|\bvostro\b|\bprecision\b|\bdell\b/i, name: 'Dell' },
-  { re: /\bprobook\b|\belitebook\b|\bpavilion\b|\bomnibook\b|\bhp\b/i, name: 'HP' },
-  { re: /\basus\b|\bzenbook\b|\bvivobook\b|\btuf\b|\brog\b/i, name: 'ASUS' },
-  { re: /\bacer\b|\baspire\b|\bnitro\b|\bpredator\b/i, name: 'Acer' },
+  { re: /\bthinkpad\b|\bthinkbook\b|\blegion\b|\byoga\b|\blenovo\b|\bideapad\b/i, name: 'Lenovo' },
+  { re: /\blatitude\b|\binspiron\b|\balienware\b|\bxps\b|\bvostro\b|\bprecision\b|\bdell\b/i, name: 'Dell' },
+  { re: /\bprobook\b|\belitebook\b|\bzbook\b|\bomen\b|\bvictus\b|\bpavilion\b|\bomnibook\b|\bhp\b/i, name: 'HP' },
+  { re: /\basus\b|\bexpertbook\b|\bzenbook\b|\bvivobook\b|\btuf\b|\brog\b/i, name: 'ASUS' },
+  { re: /\bacer\b|\bswift\b|\baspire\b|\bnitro\b|\bpredator\b/i, name: 'Acer' },
   { re: /\bmsi\b/i, name: 'MSI' },
   { re: /\bhuawei\b|\bmatebook\b/i, name: 'Huawei' },
   { re: /\bsamsung\b|\bgalaxy book\b/i, name: 'Samsung' },
@@ -44,7 +44,6 @@ const MODEL_RES: RegExp[] = [
   /\bnitro\s+\d\b/i,
   /\baspire\s+\d\b/i,
   /\bpredator\s+\w+\b/i,
-  /\btuf\s+[a-z]?\d{2}\b/i,
   /\brog\s+[a-z]+\s*\d*/i,
   /\bvivobook\s+\d{2}\b/i,
   /\bzenbook\s+[a-z0-9]+\b/i,
@@ -52,6 +51,17 @@ const MODEL_RES: RegExp[] = [
   /\bsurface\s+(?:laptop|pro)(?:\s*\d)?/i,
   /\bmagicbook\s+\w+/i,
   /\bredmibook\s+\d+/i,
+  /\bthinkbook\s+\d{2}[a-z]?(?:\s+g\d)?/i,
+  /\bzbook\s+(?:firefly|power|studio|fury|create)?\s*\d{2}(?:\s*g\d{1,2})?/i,
+  /\blegion\s+(?:pro\s+|slim\s+)?\d{1,2}[a-z]?(?:\s*pro)?/i,
+  /\byoga\s+(?:slim\s+)?[a-z]?\d{1,4}[a-z]?/i,
+  /\bomen\s+\d{2}/i,
+  /\bvictus\s+\d{2}/i,
+  /\bswift\s+(?:go\s+)?\d{1,2}\b/i,
+  /\bexpertbook\s+[a-z]\d{1,4}/i,
+  /\btuf\s+(?:gaming\s+)?[a-z]\d{2}\b/i,
+  /(?<=\bdell\s+)g\d{2}\b/i,
+  /\blenovo\s+v\d{2}(?:\s+g\d)?/i,
 ];
 
 function clean(value: string): string {
@@ -64,6 +74,7 @@ function titleCaseModel(value: string): string {
     .map((part) => {
       if (/^g\d$/i.test(part)) return part.toUpperCase();
       if (/^[a-z]\d/i.test(part)) return part.toUpperCase();
+      if (/^gaming$/i.test(part)) return '';
       if (/^(pro|air|gen)$/i.test(part)) return part[0]!.toUpperCase() + part.slice(1).toLowerCase();
       if (/^(tuf|rog|hp|msi|rx|rtx|gtx)$/i.test(part)) return part.toUpperCase();
       if (part.length <= 3 && /^[a-z]+$/i.test(part)) {
@@ -71,7 +82,11 @@ function titleCaseModel(value: string): string {
       }
       return part[0]!.toUpperCase() + part.slice(1);
     })
+    .filter(Boolean)
     .join(' ')
+    .replace(/\bZbook\b/i, 'ZBook')
+    .replace(/\bThinkbook\b/i, 'ThinkBook')
+    .replace(/\bExpertbook\b/i, 'ExpertBook')
     .replace(/\bMacbook\b/i, 'MacBook')
     .replace(/\bThinkpad\b/i, 'ThinkPad')
     .replace(/\bIdeapad\b/i, 'IdeaPad')
@@ -114,17 +129,18 @@ function pickRam(text: string): number | null {
   if (labeled) return Number(labeled[1]);
   const pair = text.match(/\b(\d{1,2})\s*\/\s*(\d{2,4})\b/);
   if (pair && Number(pair[1]) <= 64 && Number(pair[2]) >= 128) return Number(pair[1]);
-  const values = [...text.matchAll(/(\d{1,3})\s*(?:gb|гб)/gi)].map((m) => Number(m[1]));
-  const small = values.find((n) => n >= 4 && n <= 64);
-  const large = values.find((n) => n >= 128);
-  if (small && large) return small;
+  const values = [...text.matchAll(/(\d{1,3})\s*(?:gb|гб)(?!\s*(?:ssd|hdd|nvme|emmc))/gi)].map((m) => Number(m[1]));
+  const small = values.find((n) => [4, 6, 8, 12, 16, 20, 24, 32, 36, 40, 48, 64].includes(n));
+  const hasStorage = values.some((n) => n >= 128) || /\d\s*(?:tb|тб)|\d{3,4}\s*(?:gb|гб)?\s*(?:ssd|hdd|nvme)|(?:ssd|hdd|nvme)\s*\d{3,4}/i.test(text);
+  if (small && hasStorage) return small;
   return null;
 }
 
 function pickStorage(text: string, ram: number | null): number | null {
   const tb = text.match(/(\d(?:[.,]\d)?)\s*(?:tb|тб)/i);
   if (tb) return Math.round(Number(tb[1]!.replace(',', '.')) * 1024);
-  const labeled = text.match(/(\d{2,4})\s*(?:gb|гб)\s*(?:ssd|hdd|nvme)/i);
+  const labeled =
+    text.match(/(\d{3,4})\s*(?:gb|гб)?\s*(?:ssd|hdd|nvme)/i) ?? text.match(/(?:ssd|hdd|nvme)\s*[:\s]*(\d{3,4})\s*(?:gb|гб)?/i);
   if (labeled) return Number(labeled[1]);
   const pair = text.match(/\b(\d{1,2})\s*\/\s*(\d{2,4})\b/);
   if (pair && Number(pair[2]) >= 128) return Number(pair[2]);

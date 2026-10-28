@@ -64,3 +64,25 @@ describe('extractLaptopSpecs FR-CMP-005', () => {
     expect(specs.screenIn).toBe(15.6);
   });
 });
+
+const popularUsed: Array<[string, Partial<ReturnType<typeof extractLaptopSpecs>>]> = [
+  ['Ноутбук Lenovo Legion 5 15ACH6 Ryzen 5 5600H 16GB 512GB RTX 3050', { brand: 'Lenovo', model: 'Legion 5', cpu: 'Ryzen 5 5600H', ramGb: 16, storageGb: 512, gpu: 'RTX 3050' }],
+  ['HP ZBook 15 G5 i7-8850H 32gb 512 ssd', { brand: 'HP', model: 'ZBook 15 G5', cpu: 'i7-8850H', ramGb: 32, storageGb: 512 }],
+  ['Lenovo ThinkBook 15 G2 i5-1135G7 8/256', { brand: 'Lenovo', model: 'ThinkBook 15 G2', ramGb: 8, storageGb: 256 }],
+  ['Dell Latitude 5490 i5-8350U 8 ГБ ОЗУ SSD 256 ГБ', { brand: 'Dell', model: 'Latitude 5490', ramGb: 8, storageGb: 256 }],
+  ['MacBook Air M1 8/256', { brand: 'Apple', model: 'MacBook Air', cpu: 'M1', ramGb: 8, storageGb: 256 }],
+  ['Asus TUF Gaming F15 i5-11400H 16 GB 512 GB RTX 3050', { brand: 'ASUS', model: 'TUF F15', ramGb: 16, storageGb: 512 }],
+  ['Lenovo ThinkPad T480s i5 8250u 16gb 256gb', { brand: 'Lenovo', model: 'ThinkPad T480S', cpu: 'i5-8250U', ramGb: 16, storageGb: 256 }],
+  ['HP ProBook 450 G8 15.6" i5-1135G7 8GB 1TB', { brand: 'HP', model: 'ProBook 450 G8', ramGb: 8, storageGb: 1024, screenIn: 15.6 }],
+  ['HP Victus 16 Ryzen 5 5600H 16GB 512GB', { brand: 'HP', model: 'Victus 16' }],
+  ['Acer Swift 3 i5-1135G7 8GB 512GB', { brand: 'Acer', model: 'Swift 3' }],
+  ['Dell G15 5520 i7-12700H 16GB 1TB RTX 3060', { brand: 'Dell', model: 'G15', storageGb: 1024 }],
+  ['HP Omen 15 i7-10750H 16GB 512GB', { brand: 'HP', model: 'Omen 15' }],
+  ['ASUS ExpertBook B1500 i5 8GB 256GB', { brand: 'ASUS', model: 'ExpertBook B1500', ramGb: 8, storageGb: 256 }],
+];
+
+describe('extractLaptopSpecs – popular used models', () => {
+  it.each(popularUsed)('%s', (title, expected) => {
+    expect(extractLaptopSpecs(title)).toMatchObject(expected);
+  });
+});
